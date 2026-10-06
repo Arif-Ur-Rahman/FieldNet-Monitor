@@ -65,7 +65,8 @@ def attempt(batch_id: str, effective_at: datetime) -> None:
     gateway_id = Batch.objects.filter(pk=batch_id).values_list("gateway_id", flat=True).get()
     gateway = Gateway.objects.select_for_update().get(pk=gateway_id)
     batch = Batch.objects.select_for_update().get(pk=batch_id)
-    if batch.resolved:
+    # Re-checked under the lock: another worker may have run this attempt already.
+    if batch.resolved or batch.next_attempt_at is None or batch.next_attempt_at > effective_at:
         return
     batch.attempts += 1
     before = batch.processing

@@ -179,6 +179,9 @@ def run_timeout(command_id: str, effective_at: datetime) -> None:
     gateway_id = Command.objects.filter(pk=command_id).values_list("gateway_id", flat=True).get()
     gateway = Gateway.objects.select_for_update().get(pk=gateway_id)
     command = Command.objects.select_for_update().get(pk=command_id)
+    # Re-checked under the lock: an ack, a newer command or another worker may have got here first.
+    if command.acked_at is not None or command.superseded or command.timed_out:
+        return
     command.timed_out = True
     command.save(update_fields=["timed_out"])
     if gateway.command_state == PENDING[command.type]:
