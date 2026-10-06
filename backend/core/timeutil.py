@@ -1,6 +1,6 @@
 """ISO 8601 UTC formatting and parsing shared by every API."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from django.utils.dateparse import parse_datetime
 
@@ -26,3 +26,11 @@ def parse_iso(value: str) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+MAX_DEVICE_SKEW = timedelta(minutes=5)
+
+
+def is_too_far_ahead(event_time: datetime, received_at: datetime) -> bool:
+    """A device timestamp more than 5 minutes after its received time is invalid."""
+    return event_time > received_at + MAX_DEVICE_SKEW
