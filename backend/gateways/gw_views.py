@@ -1,11 +1,13 @@
 """The gateway API (/gw/v1/*), called by devices with a bearer token."""
 
 from django.db import transaction
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core import clock
+from core import openapi as doc
 from core.timeutil import iso
 from gateways import commands, ingest
 from gateways.auth import gateway_from_request
@@ -48,6 +50,13 @@ class CycleIn(serializers.Serializer):
 
 
 class HeartbeatView(APIView):
+    @extend_schema(
+        tags=[doc.GATEWAY_API],
+        summary="Heartbeat",
+        auth=doc.GATEWAY_AUTH,
+        request=HeartbeatIn,
+        responses={204: None, **doc.errors(401, 403, 422)},
+    )
     def post(self, request):
         received_at = clock.now()
         with transaction.atomic():
@@ -59,6 +68,14 @@ class HeartbeatView(APIView):
 
 
 class CycleView(APIView):
+    @extend_schema(
+        tags=[doc.GATEWAY_API],
+        summary="Report a cycle",
+        description="202 when new; 200 for an identical repeat (changes nothing); 409 cycle_conflict for another body.",
+        auth=doc.GATEWAY_AUTH,
+        request=CycleIn,
+        responses={202: doc.IgnoredOut, 200: doc.IgnoredOut, **doc.errors(401, 403, 409, 422)},
+    )
     def post(self, request):
         received_at = clock.now()
         with transaction.atomic():
@@ -72,6 +89,12 @@ class CycleView(APIView):
 class CommandsView(APIView):
     """GET /gw/v1/commands: the latest command, only while it is unacknowledged."""
 
+    @extend_schema(
+        tags=[doc.GATEWAY_API],
+        summary="The latest command, while unacknowledged",
+        auth=doc.GATEWAY_AUTH,
+        responses={200: doc.CommandsOut, **doc.errors(401, 403)},
+    )
     def get(self, request):
         gateway = gateway_from_request(request, lock=False)
         pending = commands.latest_unacknowledged(gateway)
@@ -89,6 +112,13 @@ class AckIn(serializers.Serializer):
 class CommandAckView(APIView):
     """POST /gw/v1/commands/{command_id}/ack: idempotent 204."""
 
+    @extend_schema(
+        tags=[doc.GATEWAY_API],
+        summary="Acknowledge a command (idempotent)",
+        auth=doc.GATEWAY_AUTH,
+        request=AckIn,
+        responses={204: None, **doc.errors(401, 403, 404, 422)},
+    )
     def post(self, request, command_id):
         received_at = clock.now()
         with transaction.atomic():
