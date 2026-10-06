@@ -189,6 +189,11 @@ def test_routes_are_404_outside_test_mode(settings, api, path):
 
 
 class TestWorker:
+    @pytest.fixture(autouse=True)
+    def keep_test_connection(self, monkeypatch):
+        # The worker drops stale connections each pass; inside a test transaction that would close it.
+        monkeypatch.setattr("core.management.commands.run_worker.close_old_connections", lambda: None)
+
     def test_one_pass_runs_due_work_on_the_wall_clock(self, settings, timers):
         settings.TEST_MODE = False
         first, _ = timers
