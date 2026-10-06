@@ -4,7 +4,7 @@ COMPOSE ?= docker compose
 VENV    ?= backend/.venv/bin
 STORY   ?= all
 
-.PHONY: up down logs test sim migrate test-local sim-local lint fmt
+.PHONY: up down logs test sim migrate test-local sim-local lint fmt lint-web
 
 up:            ## Start db, api, worker and web
 	$(COMPOSE) up --build
@@ -32,6 +32,9 @@ sim-local:
 
 lint:          ## Lint backend and simulator with the backend's ruff settings
 	cd backend && .venv/bin/ruff check --config ruff.toml . ../simulator && .venv/bin/ruff format --config ruff.toml --check . ../simulator
+
+lint-web:      ## Typecheck and lint the console
+	cd frontend && ./node_modules/.bin/tsc --noEmit && npm run -s lint
 
 fmt:
 	cd backend && .venv/bin/ruff check --config ruff.toml --fix . ../simulator && .venv/bin/ruff format --config ruff.toml . ../simulator

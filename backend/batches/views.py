@@ -1,10 +1,12 @@
 from django.db import transaction
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from batches import services
 from core import clock
+from core import openapi as doc
 from core.errors import Unprocessable
 from gateways.auth import gateway_from_request
 
@@ -19,6 +21,15 @@ class BatchIn(serializers.Serializer):
 class GatewayBatchView(APIView):
     """PUT /gw/v1/batches/{batch_id}: store the batch; tick() processes it in the background."""
 
+    @extend_schema(
+        tags=[doc.GATEWAY_API],
+        summary="Upload a batch of readings",
+        description="202 when new (processed in the background); 200 for an identical repeat; "
+        "409 batch_conflict for another body or gateway.",
+        auth=doc.GATEWAY_AUTH,
+        request=BatchIn,
+        responses={202: doc.BatchOut, 200: doc.BatchOut, **doc.errors(401, 403, 409, 422)},
+    )
     def put(self, request, batch_id):
         received_at = clock.now()
         with transaction.atomic():
@@ -35,5 +46,8 @@ class GatewayBatchView(APIView):
 class BatchDetailView(APIView):
     """GET /api/v1/batches/{batch_id}: the batch's processing state."""
 
+    @extend_schema(
+        tags=[doc.OPERATOR_API], summary="Batch processing state", responses={200: doc.BatchOut, **doc.errors(404)}
+    )
     def get(self, request, batch_id):
         return Response(services.serialize(services.get(batch_id)))

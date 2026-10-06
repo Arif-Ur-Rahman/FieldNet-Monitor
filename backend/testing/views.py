@@ -7,12 +7,14 @@ In TEST_MODE background work never runs on its own: it runs only inside
 from django.apps import apps
 from django.conf import settings
 from django.db import connection, transaction
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core import clock
 from core.errors import NotFound
+from core.openapi import TEST_API, ErrorOut, NowOut
 from core.tick import tick
 from core.timeutil import iso
 from testing import faults
@@ -38,6 +40,7 @@ def project_tables() -> list[str]:
 
 
 class ResetView(TestModeView):
+    @extend_schema(tags=[TEST_API], summary="Empty every table", request=None, responses={204: None})
     def post(self, request):
         quoted = ", ".join(connection.ops.quote_name(t) for t in project_tables())
         with transaction.atomic(), connection.cursor() as cur:
@@ -50,6 +53,12 @@ class ClockIn(serializers.Serializer):
 
 
 class ClockView(TestModeView):
+    @extend_schema(
+        tags=[TEST_API],
+        summary="Move the clock forward and run everything due",
+        request=ClockIn,
+        responses={200: NowOut, 409: ErrorOut, 422: ErrorOut},
+    )
     def post(self, request):
         body = ClockIn(data=request.data)
         body.is_valid(raise_exception=True)
@@ -60,6 +69,7 @@ class ClockView(TestModeView):
 
 
 class DrainView(TestModeView):
+    @extend_schema(tags=[TEST_API], summary="Run everything due now", request=None, responses={200: NowOut})
     def post(self, request):
         now = clock.now()
         tick(now)
@@ -71,6 +81,12 @@ class FaultsIn(serializers.Serializer):
 
 
 class FaultsView(TestModeView):
+    @extend_schema(
+        tags=[TEST_API],
+        summary="Make the next n processing attempts fail",
+        request=FaultsIn,
+        responses={204: None, 422: ErrorOut},
+    )
     def post(self, request):
         body = FaultsIn(data=request.data)
         body.is_valid(raise_exception=True)
