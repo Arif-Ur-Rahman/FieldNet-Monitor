@@ -108,3 +108,30 @@ def auth_flap_mid_sampling(api: API) -> None:
     expect("S lifecycle at day 39", s["lifecycle"], "dormant")
     expect("S dormant since", s["lifecycle_since"], at(39))
     expect("S sampling_cycles_done", s["sampling_cycles_done"], 1)
+
+
+@story("late-batch-correction", "a day-9 reading arrives on day 20: one correction, dormant to active")
+def late_batch_correction(api: API) -> None:
+    ex = Example(api)
+    ex.start()
+    say("Days 1-19: no_readings every day; S goes dormant at day 15.")
+    for n in range(1, 20):
+        ex.day(n)
+    s = ex.sensor()
+    expect("S lifecycle on day 20", s["lifecycle"], "dormant")
+    expect("S dormant since", s["lifecycle_since"], at(15))
+
+    say("Day 20: G uploads a batch holding a reading taken on day 9.")
+    api.clock(at(20, 9))
+    ex.g.batch("late", "S", [reading("r-late", at(9, 8))])
+    api.drain()
+    s = ex.sensor()
+    expect("S lifecycle", s["lifecycle"], "active")
+    expect("S quiet_checked_days (days 10-19)", s["quiet_checked_days"], 10)
+    lifecycle = [e for e in api.timeline("sensors", "S") if e["axis"] == "lifecycle"]
+    expect(
+        "S lifecycle timeline",
+        [(e["kind"], e["from"], e["to"]) for e in lifecycle],
+        [("transition", "pending", "active"), ("transition", "active", "dormant"), ("correction", "dormant", "active")],
+    )
+    expect("correction evidence", lifecycle[-1]["evidence_ids"], ["batch-late"])
