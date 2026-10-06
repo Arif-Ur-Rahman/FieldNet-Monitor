@@ -1,6 +1,7 @@
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from batches import views as batch_views
 from core.views import healthz
 from gateways import gw_views
 from gateways import views as gw
@@ -11,16 +12,19 @@ api_v1 = [
     path("gateways", gw.GatewayListView.as_view()),
     path("gateways/<str:gateway_id>", gw.GatewayDetailView.as_view()),
     path("gateways/<str:gateway_id>/timeline", gw.GatewayTimelineView.as_view()),
+    path("gateways/<str:gateway_id>/actions", gw.GatewayActionsView.as_view()),
     path("sensors", sn.SensorListView.as_view()),
     path("sensors/<str:sensor_id>", sn.SensorDetailView.as_view()),
     path("sensors/<str:sensor_id>/coverage", sn.SensorCoverageView.as_view()),
     path("sensors/<str:sensor_id>/actions", sn.SensorActionsView.as_view()),
     path("sensors/<str:sensor_id>/timeline", sn.SensorTimelineView.as_view()),
+    path("batches/<str:batch_id>", batch_views.BatchDetailView.as_view()),
 ]
 
 gw_v1 = [
     path("heartbeat", gw_views.HeartbeatView.as_view()),
     path("cycles", gw_views.CycleView.as_view()),
+    path("batches/<str:batch_id>", batch_views.GatewayBatchView.as_view()),
 ]
 
 test_routes = [

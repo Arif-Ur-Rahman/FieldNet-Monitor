@@ -189,6 +189,11 @@ def test_routes_are_404_outside_test_mode(settings, api, path):
 
 
 class TestWorker:
+    @pytest.fixture(autouse=True)
+    def keep_test_connection(self, monkeypatch):
+        # The worker drops stale connections each pass; inside a test transaction that would close it.
+        monkeypatch.setattr("core.management.commands.run_worker.close_old_connections", lambda: None)
+
     def test_one_pass_runs_due_work_on_the_wall_clock(self, settings, timers):
         settings.TEST_MODE = False
         first, _ = timers
@@ -208,3 +213,19 @@ class TestWorker:
         first.add(at(1), "due")
         call_command("run_worker", "--once")
         assert first.ran == []
+
+
+def test_lower_order_runs_first_on_ties_whatever_the_registration_order(test_mode):
+    late, early = FakeTimers("late"), FakeTimers("early")
+    tick.register("late", late, order=50)
+    tick.register("early", early, order=5)
+    try:
+        late.add(at(1), "late")
+        early.add(at(1), "early")
+        ran = []
+        late.ran, early.ran = ran, ran
+        tick.tick(at(1))
+        assert [label for label, *_ in ran] == ["early", "late"]
+    finally:
+        tick.unregister("late")
+        tick.unregister("early")

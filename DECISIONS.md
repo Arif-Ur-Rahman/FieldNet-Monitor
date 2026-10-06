@@ -29,6 +29,21 @@ _Every ambiguity in the brief gets one line here: what the brief says, what we c
 - **Work due at the same instant.** `tick()` runs the earliest due item first; ties run in source order: batches and retries, then gateway timers, then sensor timers. Each item runs in its own transaction with its due time as `effective_at`; `recorded_at` is the server clock.
 - **Test endpoint responses.** `/test/clock` and `/test/drain` return 200 `{"now"}`; `/test/reset` and `/test/faults` return 204. `/test/reset` empties every project table, the clock included, so the next `/test/clock` accepts any time.
 - **`/test/faults`.** `processing_failures` replaces any count left over; each failure is one processing attempt, consumed in order whatever the batch.
+- **Batch body checks.** The PUT is 422 only for a malformed body (`sensor_id` not a string, `readings` not a list). Problems inside a reading are quarantined during processing with a reason: `missing_field`, `invalid_reading_id`, `invalid_value` (not a JSON number; booleans and numeric strings included), `wrong_unit`, `invalid_taken_at`, `timestamp_in_future`, `conflicting_duplicate`.
+- **Unknown sensor in a batch.** The batch-processing rule wins over the general "unknown id → 404": the batch is accepted (202) and then quarantined with every reading listed as `unknown_sensor`.
+- **Empty batch.** `readings: []` is accepted and then quarantined as `empty_batch`: it carries no reading to accept.
+- **Batch for an uncovered sensor.** Accepted and processed: "readings are facts", whatever the coverage. Unlike cycle results, it is not ignored.
+- **Processed time.** A batch is processed at its attempt's due time (its received time, or a retry time), so a clock jump never stamps it with the jump time.
+- **When gateway transitions take effect.** Evidence-driven transitions are effective at the evidence's event time (a cycle's `finished_at`, a heartbeat's `sent_at`, a batch's latest accepted `taken_at`); the stale timer at `last_qualifying_at + 12h`; operator actions at the server clock. No transition is effective before the current `status_since`, so a gateway's timeline stays in order. Coverage changes caused by any of them use the server clock.
+- **Late evidence for a stale gateway.** Evidence older than 12 hours doesn't reconnect it ("updates nothing"), but still moves `last_qualifying_at` forward if it is newer, per the late-data rule.
+- **Old auth failures.** An auth failure whose event time is not after `last_qualifying_at` doesn't disconnect, matching how unsuspend compares the two. It still updates the latest auth failure.
+- **Qualifying cycles.** Only recorded results count: a cycle whose `readings`/`no_readings` results are all for sensors the gateway doesn't cover (ignored) does not qualify.
+- **First evidence that is already old.** It connects a new gateway at its event time; if that is more than 12 hours ago the gateway goes stale at once, effective at `last_qualifying_at + 12h`.
+- **Spare and suspended gateways.** Automatic rules never change them; timestamps keep updating. Unsuspending a gateway that never had qualifying evidence gives `new`, also if it was spare before.
+- **Unsuspend into disconnected.** `disconnected_since` becomes the event time of the first auth failure after `last_qualifying_at`.
+- **Repeated gateway actions.** 409 for suspend while suspended (`already_suspended`), unsuspend while not suspended (`not_suspended`), mark_spare outside `new` (`illegal_transition`) or while covering sensors (`gateway_covers_sensors`), and any action on a retired gateway (`gateway_retired`). A reason is optional except for suspend.
+- **Stale threshold.** The stale timer uses the threshold in force at `last_qualifying_at` (thresholds can't change yet; #23).
+- **Duplicate readings.** A repeat of an accepted reading with the same content (sensor, `taken_at`, value, unit) is ignored: not counted, not quarantined. Batches are processed in received order, so "the first processed version" is the first received. A batch whose readings are all ignored repeats ends `processed` with `accepted_count` 0.
 
 ## Trade-offs and compromises
 _TBD_
