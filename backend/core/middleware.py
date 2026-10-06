@@ -13,7 +13,8 @@ HEADER = "X-Server-Now"
 def server_now(get_response):
     def middleware(request):
         response = get_response(request)
-        if request.path.startswith(("/api/", "/gw/", "/test/")):
+        # Data endpoints only: the schema and docs pages don't need it (and mustn't need the database).
+        if request.path.startswith(("/api/v1/", "/gw/", "/test/")):
             response[HEADER] = iso(clock.now())
         return response
 
