@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+import uuid
 
 from django.db import models
 
@@ -119,3 +120,40 @@ class CycleResult(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["cycle", "sensor"], name="one_result_per_sensor_per_cycle")]
         indexes = [models.Index(fields=["sensor", "finished_at"]), models.Index(fields=["batch_id"])]
+
+
+def new_command_id() -> str:
+    return uuid.uuid4().hex
+
+
+class Command(models.Model):
+    """A stop or resume issued by an operator. The latest command (highest seq) is the desired state."""
+
+    class Type(models.TextChoices):
+        STOP = "stop"
+        RESUME = "resume"
+
+    command_id = models.CharField(max_length=32, primary_key=True, default=new_command_id)
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="commands")
+    seq = models.PositiveIntegerField()  # per gateway, from 1
+    type = models.CharField(max_length=8, choices=Type.choices)
+    issued_at = models.DateTimeField()  # server clock
+    timeout_at = models.DateTimeField()  # issued_at + command timeout
+    superseded = models.BooleanField(default=False)  # a newer command was issued
+    timed_out = models.BooleanField(default=False)  # the timeout passed while it was the latest, unacknowledged
+    acked_at = models.DateTimeField(null=True)  # event time of the first acknowledgement
+    ack_received_at = models.DateTimeField(null=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["gateway", "seq"], name="command_seq_unique_per_gateway")]
+        indexes = [models.Index(fields=["timed_out", "timeout_at"])]
+
+
+class StopPeriod(models.Model):
+    """From a stop's acked_at to the acked_at of the resume that superseded it (open-ended until then)."""
+
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="stop_periods")
+    stop = models.OneToOneField(Command, on_delete=models.CASCADE, related_name="stop_period")
+    started_at = models.DateTimeField()
+    ended_at = models.DateTimeField(null=True)
+    has_readings = models.BooleanField(default=False)  # an accepted reading was taken inside it

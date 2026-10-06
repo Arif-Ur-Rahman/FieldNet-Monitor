@@ -1,7 +1,7 @@
-"""Operator actions on a gateway: suspend, unsuspend, mark_spare, retire. stop and resume arrive in #7.
+"""Operator actions on a gateway: suspend, unsuspend, mark_spare, retire, stop and resume.
 
-Each action writes an `action` timeline entry, then the status transition it
-causes, both at the server clock.
+Each action writes an `action` timeline entry, then the status or command state
+transition it causes, both at the server clock.
 """
 
 from django.db import transaction
@@ -9,12 +9,12 @@ from django.db import transaction
 from core import clock, timeline
 from core.errors import Conflict
 from core.models import TimelineEntry
-from gateways import services, state
+from gateways import commands, services, state
 from gateways.models import Gateway
 
 Status = Gateway.Status
 Kind = TimelineEntry.Kind
-ACTIONS = ["suspend", "unsuspend", "mark_spare", "retire"]
+ACTIONS = ["suspend", "unsuspend", "mark_spare", "retire", "stop", "resume"]
 
 
 def perform(gateway_id: str, action: str, reason: str | None) -> Gateway:
@@ -36,6 +36,8 @@ def perform(gateway_id: str, action: str, reason: str | None) -> Gateway:
             state.set_status(gateway, Status.SPARE, effective_at=now, now=now, rule="mark_spare", detail=detail)
         elif action == "retire":
             state.set_status(gateway, Status.RETIRED, effective_at=now, now=now, rule="retire", detail=detail)
+        elif action in ("stop", "resume"):
+            commands.issue(gateway, action, now=now)
         return gateway
 
 
@@ -53,3 +55,5 @@ def check_allowed(gateway: Gateway, action: str) -> None:
             raise Conflict("illegal_transition", f"Only a new gateway can be marked spare; {gid} is {status}.")
         if gateway.assignments.filter(valid_to__isnull=True).exists():
             raise Conflict("gateway_covers_sensors", f"Gateway {gid} covers sensors; it cannot be spare.")
+    if action in ("stop", "resume"):
+        commands.check_allowed(gateway, action)
