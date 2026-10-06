@@ -65,6 +65,7 @@ _Every ambiguity in the brief gets one line here: what the brief says, what we c
 - **The worked example and the stale rule.** The example has G report once a day at 12:00 and stay connected, but by the 12-hour stale rule such a gateway goes stale every night, which would pause available time and move every date in the example. We apply the rules as written. Our end-to-end run of the example (`tests/test_worked_example.py`) keeps G connected with keep-alive cycles for a second sensor at 04:00 and 20:00, while S is reported only at 12:00, as in the brief.
 
 ## Trade-offs and compromises
+- **Safe to repeat.** Each gateway request is one transaction under a lock on the gateway row, and unique keys back every idempotency rule (cycle per gateway, batch id, reading id, heartbeat). Background work doesn't claim rows with `SKIP LOCKED`; instead each due item re-checks under its row lock that it is still due, so two workers that pick the same item do it once.
 - **Console polling.** Pages poll every 5 seconds with a small hook instead of SWR: no extra dependency, and nothing needs a shared client cache. Operator actions use inline forms, not browser dialogs. Light theme only.
 - **No UI tests.** The brief allows it; the console is checked by typechecking, linting, a production build and by hand against simulator data.
 - **Console API scope.** Lists filter by gateway status and sensor lifecycle only; no sorting options or pagination (the brief allows both as compromises). Fine for a fleet of hundreds.
