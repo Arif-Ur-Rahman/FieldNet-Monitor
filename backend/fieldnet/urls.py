@@ -17,6 +17,7 @@ api_v1 = [
     path("sensors/<str:sensor_id>/coverage", sn.SensorCoverageView.as_view()),
     path("sensors/<str:sensor_id>/actions", sn.SensorActionsView.as_view()),
     path("sensors/<str:sensor_id>/timeline", sn.SensorTimelineView.as_view()),
+    path("batches/<str:batch_id>", batch_views.BatchDetailView.as_view()),
 ]
 
 gw_v1 = [

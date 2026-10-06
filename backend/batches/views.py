@@ -30,3 +30,10 @@ class GatewayBatchView(APIView):
             data = body.validated_data
             batch, created = services.receive(gateway, batch_id, data, request.data, received_at=received_at)
         return Response(services.serialize(batch), status=status.HTTP_202_ACCEPTED if created else status.HTTP_200_OK)
+
+
+class BatchDetailView(APIView):
+    """GET /api/v1/batches/{batch_id}: the batch's processing state."""
+
+    def get(self, request, batch_id):
+        return Response(services.serialize(services.get(batch_id)))
