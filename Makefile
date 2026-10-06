@@ -30,8 +30,8 @@ test-local:
 sim-local:
 	API_URL=http://localhost:8000 $(VENV)/python simulator/sim.py $(STORY)
 
-lint:
-	cd backend && .venv/bin/ruff check . && .venv/bin/ruff format --check .
+lint:          ## Lint backend and simulator with the backend's ruff settings
+	cd backend && .venv/bin/ruff check --config ruff.toml . ../simulator && .venv/bin/ruff format --config ruff.toml --check . ../simulator
 
 fmt:
-	cd backend && .venv/bin/ruff check --fix . && .venv/bin/ruff format .
+	cd backend && .venv/bin/ruff check --config ruff.toml --fix . ../simulator && .venv/bin/ruff format --config ruff.toml . ../simulator
