@@ -38,6 +38,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "core.middleware.server_now",
 ]
 
 ROOT_URLCONF = "fieldnet.urls"
@@ -87,7 +88,8 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": (
         "All bodies are JSON and all times ISO 8601 UTC. Errors are "
         '`{"error": "<code>", "detail": "<text>"}`: invalid bodies 422, conflicts and illegal actions 409, '
-        "unknown ids 404. Devices call /gw/v1 with `Authorization: Bearer <token>`."
+        "unknown ids 404. Devices call /gw/v1 with `Authorization: Bearer <token>`. "
+        "Every response carries `X-Server-Now`: the server clock (in TEST_MODE, the test clock)."
     ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
