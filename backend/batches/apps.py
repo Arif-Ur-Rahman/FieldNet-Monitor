@@ -9,4 +9,4 @@ class BatchesConfig(AppConfig):
         from batches import processing
         from core import tick
 
-        tick.register("batches", processing.next_due)
+        tick.register("batches", processing.next_due, order=tick.BATCHES)

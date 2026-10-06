@@ -8,7 +8,9 @@ no longer due (or due later), otherwise tick() stops at MAX_STEPS.
 
 Each item runs with its own due time as `effective_at`, never the time tick()
 was called with: a clock jump from day 1 to day 5 applies a day-3 timer at day 3.
-Items due at the same instant run in source registration order.
+Items due at the same instant run in source order: lower `order` first, then
+registration order. Evidence comes before timers: batches (10), gateways (20),
+sensors (30).
 
 The worker calls tick(clock.now()) every few seconds. In TEST_MODE background
 work never runs on its own: only /test/clock and /test/drain call tick().
@@ -35,25 +37,26 @@ class Due:
 
 Source = Callable[[datetime], Due | None]
 
-_sources: list[tuple[str, Source]] = []
+BATCHES, GATEWAYS, SENSORS = 10, 20, 30
+
+_sources: list[tuple[int, str, Source]] = []
 
 
-def register(name: str, source: Source) -> None:
-    """Add a source. Registering the same name again replaces it in place."""
-    for i, (existing, _) in enumerate(_sources):
-        if existing == name:
-            _sources[i] = (name, source)
-            return
-    _sources.append((name, source))
+def register(name: str, source: Source, *, order: int = 100) -> None:
+    """Add a source. Registering the same name again replaces it."""
+    unregister(name)
+    _sources.append((order, name, source))
+    # Stable sort: equal orders keep registration order.
+    _sources.sort(key=lambda s: s[0])
 
 
 def unregister(name: str) -> None:
-    _sources[:] = [(n, s) for n, s in _sources if n != name]
+    _sources[:] = [s for s in _sources if s[1] != name]
 
 
 def _next(up_to: datetime) -> Due | None:
     best = None
-    for _, source in _sources:
+    for _, _, source in _sources:
         due = source(up_to)
         # Strictly earlier wins, so equal due times keep registration order.
         if due is not None and (best is None or due.due_at < best.due_at):
