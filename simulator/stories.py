@@ -135,3 +135,48 @@ def late_batch_correction(api: API) -> None:
         [("transition", "pending", "active"), ("transition", "active", "dormant"), ("correction", "dormant", "active")],
     )
     expect("correction evidence", lifecycle[-1]["evidence_ids"], ["batch-late"])
+
+
+@story("ignored-stop", "a stop goes unacknowledged, then a late ack, and the gateway keeps collecting")
+def ignored_stop(api: API) -> None:
+    api.clock(at(0, 8))
+    g = api.gateway("G1")
+    api.sensor("S1")
+    api.cover("S1", ["G1"])
+    g.cycle(at(0, 8), [{"sensor_id": "S1", "outcome": "no_readings"}])
+
+    say("Day 0 09:00: the operator stops G1. G1 doesn't acknowledge.")
+    api.clock(at(0, 9))
+    expect("G1 command_state", api.action("G1", "stop")["command_state"], "stop_pending")
+    [command] = g.commands()
+    expect("GET /gw/v1/commands", command["type"], "stop")
+    api.clock(at(0, 9, 30))
+    gw = api.get_gateway("G1")
+    expect("G1 command_state after 10 minutes", gw["command_state"], "stop_failed")
+    expect("G1 coverage_class (no proof it stopped)", gw["coverage_class"], "available")
+    expect("the stop is still served", [c["type"] for c in g.commands()], ["stop"])
+
+    say("Day 0 09:31: a late ack, acked at 09:29.")
+    api.clock(at(0, 9, 31))
+    g.ack(command["command_id"], at(0, 9, 29))
+    gw = api.get_gateway("G1")
+    expect("G1 command_state", gw["command_state"], "stopped")
+    expect("G1 coverage_class", gw["coverage_class"], "stopped")
+    expect("S1 collection", api.get_sensor("S1")["collection"], "collection_stopped")
+
+    say("Day 0 11:00: G1 keeps uploading readings it took while stopped.")
+    api.clock(at(0, 11))
+    g.batch("b-stopped", "S1", [reading("r1", at(0, 10, 30))])
+    api.drain()
+    gw = api.get_gateway("G1")
+    expect("G1 flags", gw["flags"], ["collecting_after_stop"])
+    expect("the reading is kept and counted", api.get_sensor("S1")["lifecycle"], "active")
+
+    say("Day 0 12:00: the operator resumes G1, which acknowledges.")
+    api.clock(at(0, 12))
+    api.action("G1", "resume")
+    [resume] = g.commands()
+    g.ack(resume["command_id"], at(0, 12))
+    gw = api.get_gateway("G1")
+    expect("G1 command_state", gw["command_state"], "running")
+    expect("G1 flags", gw["flags"], [])
