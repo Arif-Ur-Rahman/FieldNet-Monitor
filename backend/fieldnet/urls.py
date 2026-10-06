@@ -12,6 +12,7 @@ api_v1 = [
     path("gateways", gw.GatewayListView.as_view()),
     path("gateways/<str:gateway_id>", gw.GatewayDetailView.as_view()),
     path("gateways/<str:gateway_id>/timeline", gw.GatewayTimelineView.as_view()),
+    path("gateways/<str:gateway_id>/actions", gw.GatewayActionsView.as_view()),
     path("sensors", sn.SensorListView.as_view()),
     path("sensors/<str:sensor_id>", sn.SensorDetailView.as_view()),
     path("sensors/<str:sensor_id>/coverage", sn.SensorCoverageView.as_view()),
