@@ -8,11 +8,14 @@ row locked (gateways before sensors).
 from datetime import datetime
 
 from core import config, timeline
-from core.errors import Conflict
+from core.errors import Conflict, NotFound, Unprocessable
+from core.models import TimelineEntry
+from core.timeutil import is_too_far_ahead
 from gateways import state
-from gateways.models import Command, Gateway
+from gateways.models import Command, Gateway, StopPeriod
 
 CommandState = Gateway.CommandState
+Kind = TimelineEntry.Kind
 
 ILLEGAL = {
     Command.Type.STOP: {CommandState.STOP_PENDING, CommandState.STOPPED},
@@ -81,3 +84,66 @@ def issue(gateway: Gateway, command_type: str, *, now: datetime) -> Command:
         evidence_ids=[f"command-{command.command_id}"],
     )
     return command
+
+
+def latest_unacknowledged(gateway: Gateway) -> list[Command]:
+    """What GET /gw/v1/commands returns: the latest command, only while it is unacknowledged."""
+    latest = gateway.commands.order_by("-seq").first()
+    return [latest] if latest is not None and latest.acked_at is None else []
+
+
+def acknowledge(gateway: Gateway, command_id: str, acked_at: datetime, *, received_at: datetime) -> None:
+    """Record an acknowledgement. The first one wins; a repeat changes nothing.
+
+    Every first ack writes an `ack` entry. Only an ack of the latest command
+    changes the command state; an ack of a superseded command is recorded only.
+    """
+    command = Command.objects.filter(pk=command_id, gateway=gateway).first()
+    if command is None:
+        raise NotFound("command_not_found", f"No command {command_id} for gateway {gateway.gateway_id}.")
+    if is_too_far_ahead(acked_at, received_at):
+        raise Unprocessable("timestamp_in_future", "acked_at is more than 5 minutes after the received time.")
+    if command.acked_at is not None:
+        return
+    command.acked_at, command.ack_received_at = acked_at, received_at
+    command.save(update_fields=["acked_at", "ack_received_at"])
+    evidence_ids = [f"command-{command.command_id}"]
+    timeline.append(
+        "gateway",
+        gateway.gateway_id,
+        kind=Kind.ACK,
+        rule=f"ack_{command.type}",
+        effective_at=acked_at,
+        evidence_ids=evidence_ids,
+        detail={"command_id": command.command_id, "seq": command.seq, "superseded": command.superseded},
+    )
+    if command.type == Command.Type.STOP:
+        open_stop_period(gateway, command)
+    else:
+        close_stop_periods(gateway, command)
+    if not command.superseded:
+        to = CommandState.STOPPED if command.type == Command.Type.STOP else CommandState.RUNNING
+        set_command_state(
+            gateway, to, effective_at=acked_at, now=received_at, rule=f"ack_{command.type}", evidence_ids=evidence_ids
+        )
+
+
+def superseding_resume(stop: Command) -> Command | None:
+    """The resume that superseded a stop: the first resume issued after it."""
+    return stop.gateway.commands.filter(type=Command.Type.RESUME, seq__gt=stop.seq).order_by("seq").first()
+
+
+def open_stop_period(gateway: Gateway, stop: Command) -> StopPeriod:
+    """A stop period starts at the stop's acked_at. If its resume was already acked, it is closed at once."""
+    resume = superseding_resume(stop)
+    ended_at = None
+    if resume is not None and resume.acked_at is not None:
+        ended_at = max(resume.acked_at, stop.acked_at)
+    return StopPeriod.objects.create(gateway=gateway, stop=stop, started_at=stop.acked_at, ended_at=ended_at)
+
+
+def close_stop_periods(gateway: Gateway, resume: Command) -> None:
+    """A resume's ack ends every open stop period of the stops it superseded."""
+    for period in gateway.stop_periods.filter(ended_at__isnull=True, stop__seq__lt=resume.seq):
+        period.ended_at = max(resume.acked_at, period.started_at)
+        period.save(update_fields=["ended_at"])
