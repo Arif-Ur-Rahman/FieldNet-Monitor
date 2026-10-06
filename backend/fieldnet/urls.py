@@ -2,13 +2,14 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from batches import views as batch_views
-from core.views import healthz
+from core.views import DashboardView, healthz
 from gateways import gw_views
 from gateways import views as gw
 from sensors import views as sn
 from testing import views as test_views
 
 api_v1 = [
+    path("dashboard", DashboardView.as_view()),
     path("gateways", gw.GatewayListView.as_view()),
     path("gateways/<str:gateway_id>", gw.GatewayDetailView.as_view()),
     path("gateways/<str:gateway_id>/timeline", gw.GatewayTimelineView.as_view()),
