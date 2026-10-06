@@ -5,6 +5,7 @@ import { Fragment, useState } from "react";
 import ActionForm from "@/components/ActionForm";
 import { Badge, Count, Legend, Paused } from "@/components/badges";
 import PageHeader from "@/components/PageHeader";
+import TimelineDrawer from "@/components/TimelineDrawer";
 import type { Lifecycle, Sensor } from "@/lib/api";
 import { duration, label, stamp, until } from "@/lib/format";
 import { usePoll } from "@/lib/usePoll";
@@ -27,6 +28,7 @@ function NextEvaluation({ s, now }: { s: Sensor; now: Date | null }) {
 export default function SensorsPage() {
   const [lifecycle, setLifecycle] = useState("");
   const [decommissioning, setDecommissioning] = useState<string | null>(null);
+  const [timelineOf, setTimelineOf] = useState<string | null>(null);
   const path = lifecycle ? `/api/v1/sensors?lifecycle=${lifecycle}` : "/api/v1/sensors";
   const { data, serverNow, error, refresh } = usePoll<Sensor[]>(path);
 
@@ -84,7 +86,13 @@ export default function SensorsPage() {
               <Fragment key={s.sensor_id}>
                 <tr className="border-b border-slate-100 align-top">
                   <td className="px-3 py-2">
-                    <div className="font-mono text-slate-900">{s.sensor_id}</div>
+                    <button
+                      onClick={() => setTimelineOf(s.sensor_id)}
+                      title="Show timeline"
+                      className="font-mono text-slate-900 underline decoration-slate-300 underline-offset-2 hover:decoration-slate-900"
+                    >
+                      {s.sensor_id}
+                    </button>
                     <div className="text-xs text-slate-500">{s.type}</div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
@@ -143,6 +151,7 @@ export default function SensorsPage() {
           </tbody>
         </table>
       </div>
+      {timelineOf && <TimelineDrawer entity="sensors" id={timelineOf} onClose={() => setTimelineOf(null)} />}
     </main>
   );
 }

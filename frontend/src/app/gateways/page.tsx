@@ -5,6 +5,7 @@ import { Fragment, useState } from "react";
 import ActionForm from "@/components/ActionForm";
 import { Badge, Flag, Legend, Unknown } from "@/components/badges";
 import PageHeader from "@/components/PageHeader";
+import TimelineDrawer from "@/components/TimelineDrawer";
 import type { Gateway, GatewayStatus } from "@/lib/api";
 import { ago, duration, label, stamp } from "@/lib/format";
 import { usePoll } from "@/lib/usePoll";
@@ -36,6 +37,7 @@ function When({ iso, now, never }: { iso: string | null; now: Date | null; never
 export default function FleetPage() {
   const [status, setStatus] = useState("");
   const [pending, setPending] = useState<{ gateway: string; action: string } | null>(null);
+  const [timelineOf, setTimelineOf] = useState<string | null>(null);
   const path = status ? `/api/v1/gateways?status=${status}` : "/api/v1/gateways";
   const { data, serverNow, error, refresh } = usePoll<Gateway[]>(path);
 
@@ -88,7 +90,13 @@ export default function FleetPage() {
               <Fragment key={g.gateway_id}>
                 <tr className="border-b border-slate-100 align-top">
                   <td className="px-3 py-2">
-                    <div className="font-mono text-slate-900">{g.gateway_id}</div>
+                    <button
+                      onClick={() => setTimelineOf(g.gateway_id)}
+                      title="Show timeline"
+                      className="font-mono text-slate-900 underline decoration-slate-300 underline-offset-2 hover:decoration-slate-900"
+                    >
+                      {g.gateway_id}
+                    </button>
                     <div className="text-xs text-slate-500">{g.name}</div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
@@ -150,6 +158,7 @@ export default function FleetPage() {
           </tbody>
         </table>
       </div>
+      {timelineOf && <TimelineDrawer entity="gateways" id={timelineOf} onClose={() => setTimelineOf(null)} />}
     </main>
   );
 }
