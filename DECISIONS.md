@@ -51,6 +51,7 @@ _Every ambiguity in the brief gets one line here: what the brief says, what we c
 - **A readings outcome resolved as processed.** It doesn't make its cycle's day a reading day by itself: only an accepted reading taken that day does. A day decided late (its batch resolved after midnight) counts from that resolution time.
 - **Stale threshold.** The stale timer uses the threshold in force at `last_qualifying_at` (thresholds can't change yet; #23).
 - **Duplicate readings.** A repeat of an accepted reading with the same content (sensor, `taken_at`, value, unit) is ignored: not counted, not quarantined. Batches are processed in received order, so "the first processed version" is the first received. A batch whose readings are all ignored repeats ends `processed` with `accepted_count` 0.
+- **Coverage history for the engine.** The sensor's coverage history is read from its recorded coverage transitions, timed by the server clock as the brief requires for coverage changes, rather than rebuilt from gateway transitions (which use event times). A gateway's class history, used for quiet days, comes from its status and command state transitions.
 
 ## Trade-offs and compromises
 _TBD_
