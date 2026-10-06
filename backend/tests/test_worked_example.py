@@ -236,3 +236,16 @@ class TestUnresolvedDay:
         ex.play(16, s=self.s)
         s = ex.sensor()
         assert (state(s), s["quiet_checked_days"]) == (("dormant", None, iso(16)), 14)
+
+
+class TestCoverage:
+    def test_loss_retires_and_reassignment_makes_it_pending(self, ex, api):
+        ex.start()
+        ex.play(5)
+        set_coverage(api, "S", [])
+        s = ex.sensor()
+        assert (state(s), s["coverage"]) == (("retired", "no_live_coverage", iso(5)), "none")
+        ex.play(6)
+        set_coverage(api, "S", ["G"])
+        s = ex.sensor()
+        assert (state(s), s["quiet_checked_days"], s["sampling_cycles_done"]) == (("pending", None, iso(6)), 0, 0)
