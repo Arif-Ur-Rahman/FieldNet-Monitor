@@ -1,5 +1,7 @@
 """Pure unit tests for the latest collection rule. No database."""
 
+from datetime import timedelta
+
 import pytest
 
 from sensors.engine.collection import Collection, latest_collection
@@ -9,7 +11,7 @@ from tests.conftest import at
 NOW = at(10, 12)
 
 
-def run(outcomes=(), *, coverage="available", classes=None, batches=None, unmentioned=(), now=NOW):
+def run(outcomes=(), *, coverage="available", classes=None, batches=None, unmentioned=(), now=NOW, deadline=None):
     return latest_collection(
         now=now,
         coverage=coverage,
@@ -17,6 +19,7 @@ def run(outcomes=(), *, coverage="available", classes=None, batches=None, unment
         outcomes=outcomes,
         batches=batches or {},
         unmentioned_readings=unmentioned,
+        deadline=deadline or timedelta(hours=24),
     )
 
 
@@ -50,8 +53,8 @@ class TestLatestPerGateway:
         assert run([o("readings", 8), o("timed_out", 10)], batches=ARRIVED).value == "timed_out"
 
     def test_older_than_24_hours_does_not_count(self):
-        assert run([o("no_readings", 11, day=9)]).value == "not_checked"
-        assert run([o("no_readings", 12, day=9)]).value == "no_readings"
+        assert run([o("no_readings", 12, day=9)]).value == "not_checked"
+        assert run([o("no_readings", 13, day=9)]).value == "no_readings"
 
     def test_only_available_gateways_count(self):
         classes = {"g1": "recoverable", "g2": "available"}
@@ -86,7 +89,8 @@ class TestBatches:
         assert c == Collection("readings", at(11, 10))
 
     def test_missing_batch_after_the_deadline_is_could_not_read(self):
-        c = run([o("readings", 12, day=9), o("timed_out", 13, day=9, gw="g2")])
+        # With the default 24h deadline an outcome inside the window can't be past it; use a shorter one.
+        c = run([o("readings", 5), o("timed_out", 6, gw="g2")], deadline=timedelta(hours=6))
         assert c.value == "could_not_read"
 
     def test_quarantined_batch_is_could_not_read(self):
@@ -106,8 +110,8 @@ class TestUnmentionedReadings:
         assert run([], classes=classes, unmentioned=[("g9", at(10, 10))]).value == "not_checked"
 
     def test_never_turn_into_could_not_read(self):
-        # Exactly 24h old: still inside the window, and never treated as a missing batch.
-        assert run([], unmentioned=[("g1", at(9, 12))]).value == "readings"
+        # Older than the batch deadline, and never treated as a missing batch.
+        assert run([], unmentioned=[("g1", at(10, 5))], deadline=timedelta(hours=6)).value == "readings"
 
 
 class TestChangesAt:

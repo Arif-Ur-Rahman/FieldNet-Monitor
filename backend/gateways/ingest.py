@@ -16,6 +16,7 @@ from core.errors import Conflict, Unprocessable
 from core.timeutil import is_too_far_ahead
 from gateways import state
 from gateways.models import Cycle, CycleResult, Gateway, Heartbeat, Session
+from sensors.engine.reconcile import reconcile_sensors
 from sensors.models import Sensor
 
 Outcome = CycleResult.Outcome
@@ -108,4 +109,6 @@ def record_cycle(gateway: Gateway, data: dict, raw: dict, *, received_at: dateti
         state.on_auth_failure(gateway, cycle.finished_at, now=received_at, evidence_id=evidence_id)
     elif any(r["outcome"] in QUALIFYING_OUTCOMES for r in results if r["sensor_id"] in covered):
         state.on_qualifying(gateway, cycle.finished_at, now=received_at, evidence_id=evidence_id)
+    # Gateway first (above), which recomputed coverage; then the evidence goes to the sensors.
+    reconcile_sensors(covered, now=received_at, evidence_id=evidence_id)
     return cycle, True

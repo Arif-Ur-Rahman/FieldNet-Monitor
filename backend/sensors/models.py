@@ -31,6 +31,8 @@ class Sensor(models.Model):
     quiet_checked_days = models.PositiveIntegerField(default=0)
     sampling_cycles_done = models.PositiveIntegerField(default=0)
     next_evaluation_at = models.DateTimeField(null=True)
+    # The next moment the engine's result could change by time alone; tick() reconciles the sensor then.
+    reconcile_at = models.DateTimeField(null=True, db_index=True)
 
     @property
     def unit(self) -> str:
