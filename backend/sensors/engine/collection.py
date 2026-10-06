@@ -25,7 +25,7 @@ COLLECTION_STOPPED = "collection_stopped"
 class Collection:
     value: str
     # When the value would change by time passing alone (a qualifying outcome
-    # turning 24h old), or None if nothing would.
+    # turning 24h old, or an unarrived batch reaching its deadline), or None.
     changes_at: datetime | None
 
 
@@ -37,7 +37,8 @@ def as_shown(o: Outcome, batches: dict[str, BatchInfo], deadline: timedelta, now
     readings and the batch still has time); it flips at the deadline if the
     batch hasn't arrived by then.
     """
-    if o.outcome != "readings":
+    if o.outcome != "readings" or o.batch_id is None:
+        # No batch_id on a readings outcome: an accepted reading no cycle mentions. Always readings.
         return o.outcome, None
     resolved, at, value = resolution(o, batches, deadline, now)
     return (value, None) if resolved else ("readings", at)
