@@ -8,3 +8,6 @@ urlpatterns = [
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]
+
+handler404 = "core.errors.handler404"
+handler500 = "core.errors.handler500"
