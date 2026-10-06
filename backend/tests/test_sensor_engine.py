@@ -1,5 +1,7 @@
 """The sensor engine wired in: through the API and the test clock."""
 
+from datetime import timedelta
+
 import pytest
 
 from core import timeline
@@ -221,10 +223,11 @@ class TestCollection:
         world.clock(1, 17, 59)
         assert world.sensor()["collection"] == "no_readings"
         world.clock(1, 20)
-        # S's last outcome (day 0 18:00) aged out at day 1 18:00, recorded at that time by tick.
+        # S's last outcome (day 0 18:00) aged out just after day 1 18:00, recorded then by tick.
         assert (world.sensor()["coverage"], world.sensor()["collection"]) == ("available", "not_checked")
         last = [e for e in timeline.entries("sensor", "S") if e.axis == "collection"][-1]
-        assert (last.from_value, last.to_value, last.effective_at) == ("no_readings", "not_checked", at(1, 18))
+        assert (last.from_value, last.to_value) == ("no_readings", "not_checked")
+        assert last.effective_at == at(1, 18) + timedelta(microseconds=1)
 
 
 class TestDecommission:
