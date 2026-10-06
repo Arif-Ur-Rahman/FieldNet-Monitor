@@ -59,6 +59,9 @@ _Every ambiguity in the brief gets one line here: what the brief says, what we c
 - **Which thresholds apply.** A dormant wait or sampling window uses the configuration in force when it starts; the quiet-day threshold and the cycle limit use the one in force when they are evaluated.
 - **`quiet_checked_days` outside active.** It keeps its value while dormant or sampling and resets on a reading or on entering `pending`. A reading resets it at the reading's time.
 - **A window waiting on a batch.** A sampling window whose `[start, end)` holds a `readings` outcome with an unresolved batch is evaluated only once that batch resolves; the transition is still effective at the window end.
+- **Corrections.** The recorded lifecycle history is read back from the timeline (a correction's recomputed transitions replace everything before it). If the replay only extends it, the new steps are appended as transitions; if a past step differs, one `correction` entry is appended, effective where the two histories first diverge. Lifecycle steps that keep the same value (a new sampling window, a changed retired reason) are recorded too, so the comparison stays exact.
+- **Collection gateways.** Collection considers every gateway with outcomes for the sensor whose class is `available` now, not only those still assigned to it.
+- **The worked example and the stale rule.** The example has G report once a day at 12:00 and stay connected, but by the 12-hour stale rule such a gateway goes stale every night, which would pause available time and move every date in the example. We apply the rules as written; our end-to-end example has G cycle every 6 hours, which keeps it connected as the example assumes.
 
 ## Trade-offs and compromises
 _TBD_
