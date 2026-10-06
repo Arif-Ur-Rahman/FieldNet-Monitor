@@ -16,7 +16,7 @@ logs:
 	$(COMPOSE) logs -f api worker
 
 test:          ## Run the backend test suite in Docker
-	$(COMPOSE) run --rm --build -e TEST_MODE=1 api pytest
+	$(COMPOSE) run --rm --build -v $(PWD)/simulator:/simulator -e TEST_MODE=1 api pytest
 
 sim:           ## Play simulator stories against the running stack (STORY=name|all)
 	$(COMPOSE) run --rm --no-deps -v $(PWD)/simulator:/simulator -e API_URL=http://api:8000 api python /simulator/sim.py $(STORY)
