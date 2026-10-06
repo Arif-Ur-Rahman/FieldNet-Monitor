@@ -211,3 +211,28 @@ class TestLateReading:
         ex.play(24)
         assert state(ex.sensor()) == ("dormant", None, iso(24))
         assert ex.lifecycle()[-1] == ("transition", "dormant", None, at(24))
+
+
+class TestUnresolvedDay:
+    """On day 14, G reports readings but the batch never arrives."""
+
+    @staticmethod
+    def s(day):
+        if day == 14:
+            return {"sensor_id": "S", "outcome": "readings", "batch_id": "lost"}
+        return {"sensor_id": "S", "outcome": "no_readings"}
+
+    def test_dormant_only_after_another_quiet_day_completes(self, ex):
+        ex.start()
+        ex.play(15, s=self.s)
+        s = ex.sensor()
+        # Day 14 is unresolved: it holds back counting.
+        assert (s["lifecycle"], s["quiet_checked_days"]) == ("active", 13)
+
+        ex.play(15, 12, s=self.s)
+        # Unresolved until day 15 12:00, then unchecked: neither counts nor resets.
+        assert (ex.sensor()["lifecycle"], ex.sensor()["quiet_checked_days"]) == ("active", 13)
+
+        ex.play(16, s=self.s)
+        s = ex.sensor()
+        assert (state(s), s["quiet_checked_days"]) == (("dormant", None, iso(16)), 14)
