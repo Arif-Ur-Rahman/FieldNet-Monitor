@@ -16,7 +16,7 @@ logs:
 	$(COMPOSE) logs -f api worker
 
 test:          ## Run the backend test suite in Docker
-	$(COMPOSE) run --rm --build -v $(PWD)/simulator:/simulator -e TEST_MODE=1 api pytest
+	$(COMPOSE) run --rm --build -v $(PWD)/simulator:/simulator -v $(PWD)/docs:/docs -e TEST_MODE=1 api pytest
 
 sim:           ## Play simulator stories against the running stack (STORY=name|all)
 	$(COMPOSE) run --rm --no-deps -v $(PWD)/simulator:/simulator -e API_URL=http://api:8000 api python /simulator/sim.py $(STORY)
@@ -24,8 +24,8 @@ sim:           ## Play simulator stories against the running stack (STORY=name|a
 migrate:
 	$(COMPOSE) run --rm api python manage.py migrate
 
-test-local:
-	cd backend && .venv/bin/pytest
+test-local:    ## The same suite against local Postgres, with TEST_MODE=1 like make test
+	cd backend && TEST_MODE=1 .venv/bin/pytest
 
 sim-local:
 	API_URL=http://localhost:8000 $(VENV)/python simulator/sim.py $(STORY)

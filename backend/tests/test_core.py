@@ -205,3 +205,12 @@ def test_every_api_response_carries_the_server_clock(api, clock_at):
     assert api.post("/test/clock", {"now": "2026-01-05T00:00:00Z"}, format="json")["X-Server-Now"] == (
         "2026-01-05T00:00:00Z"
     )
+
+
+def test_schema_and_docs_pages_do_not_read_the_clock(client, settings):
+    """Without database access, as in TEST_MODE: the header is for data endpoints only."""
+    settings.TEST_MODE = True
+    for path in ("/api/schema/", "/api/docs/"):
+        resp = client.get(path)
+        assert resp.status_code == 200
+        assert "X-Server-Now" not in resp
