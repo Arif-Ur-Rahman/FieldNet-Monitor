@@ -10,8 +10,10 @@ so the timeline stays in order. Coverage changes use the server clock (`now`).
 """
 
 from datetime import datetime
+from functools import partial
 
 from core import config, timeline
+from core.tick import Due
 from gateways.models import Cycle, Gateway, Heartbeat, Session
 
 Status = Gateway.Status
@@ -157,3 +159,21 @@ def first_auth_failure_after(gateway: Gateway, after: datetime | None) -> dateti
         if t is not None
     ]
     return min(times) if times else None
+
+
+def next_stale_due(up_to: datetime):
+    """The tick() source: the connected gateway that goes stale first, if that is by `up_to`."""
+    gateway = (
+        Gateway.objects.filter(status=Status.CONNECTED, last_qualifying_at__isnull=False)
+        .order_by("last_qualifying_at", "gateway_id")
+        .first()
+    )
+    due = stale_due(gateway) if gateway is not None else None
+    if due is None or due > up_to:
+        return None
+    return Due(due_at=due, run=partial(run_stale, gateway.gateway_id), label=f"stale {gateway.gateway_id}")
+
+
+def run_stale(gateway_id: str, effective_at: datetime) -> None:
+    gateway = Gateway.objects.select_for_update().get(pk=gateway_id)
+    apply_stale(gateway, effective_at)
