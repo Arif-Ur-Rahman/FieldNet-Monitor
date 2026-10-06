@@ -11,9 +11,11 @@ on the sensor row.
 """
 
 from datetime import datetime
+from functools import partial
 
 from core import timeline
 from core.models import TimelineEntry
+from core.tick import Due
 from core.timeutil import iso, parse_iso
 from sensors.engine.availability import availability, value_at
 from sensors.engine.collection import latest_collection
@@ -152,3 +154,26 @@ def record(sensor: Sensor, result, evidence_id: str | None) -> None:
             ],
         },
     )
+
+
+def reconcile_sensors(sensor_ids, *, now: datetime, evidence_id: str | None = None) -> None:
+    """Lock and reconcile these sensors (in id order, after the caller's gateway lock)."""
+    for sensor in Sensor.objects.select_for_update().filter(pk__in=list(sensor_ids)).order_by("pk"):
+        reconcile(sensor, now=now, evidence_id=evidence_id)
+
+
+def next_due(up_to: datetime) -> Due | None:
+    """The tick() source: the sensor whose result may change first by time alone, if by `up_to`."""
+    row = (
+        Sensor.objects.filter(reconcile_at__lte=up_to)
+        .order_by("reconcile_at", "pk")
+        .values_list("pk", "reconcile_at")
+        .first()
+    )
+    if row is None:
+        return None
+    return Due(due_at=row[1], run=partial(run_due, row[0]), label=f"sensor {row[0]}")
+
+
+def run_due(sensor_id: str, effective_at: datetime) -> None:
+    reconcile_sensors([sensor_id], now=effective_at)

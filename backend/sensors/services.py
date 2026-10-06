@@ -10,6 +10,7 @@ from core.models import TimelineEntry
 from core.timeutil import iso
 from gateways.coverage import sensor_coverage
 from gateways.models import Gateway
+from sensors.engine.reconcile import reconcile
 from sensors.models import CoverageAssignment, Sensor, SensorAction
 
 Kind = TimelineEntry.Kind
@@ -37,9 +38,14 @@ def covering_gateways(sensor: Sensor) -> list[Gateway]:
 
 
 def recompute_coverage(sensor: Sensor, *, effective_at: datetime, rule: str, evidence_ids=()) -> bool:
-    """Derive the sensor's coverage from its current gateways; record a change. Returns True if it changed."""
+    """Derive the sensor's coverage from its current gateways; record a change. Returns True if it changed.
+
+    The sensor is then reconciled at once, so coverage none retires it immediately,
+    outside tick. Callers hold a lock on the sensor row.
+    """
     new = sensor_coverage(g.coverage_class for g in covering_gateways(sensor))
     if new == sensor.coverage:
+        reconcile(sensor, now=effective_at)  # a covering gateway's class may still have changed
         return False
     timeline.record_transition(
         "sensor",
@@ -53,6 +59,7 @@ def recompute_coverage(sensor: Sensor, *, effective_at: datetime, rule: str, evi
     )
     sensor.coverage = new
     sensor.save(update_fields=["coverage"])
+    reconcile(sensor, now=effective_at)
     return True
 
 
@@ -114,22 +121,7 @@ def decommission(sensor_id: str, reason: str) -> Sensor:
             evidence_ids=[f"action-{action.pk}"],
             detail={"reason": reason},
         )
-        timeline.record_transition(
-            "sensor",
-            sensor_id,
-            "lifecycle",
-            sensor.lifecycle,
-            Sensor.Lifecycle.DECOMMISSIONED,
-            rule="decommission",
-            effective_at=now,
-            evidence_ids=[f"action-{action.pk}"],
-            detail={"reason": reason},
-        )
-        sensor.lifecycle = Sensor.Lifecycle.DECOMMISSIONED
-        sensor.lifecycle_reason = reason
-        sensor.lifecycle_since = now
-        sensor.next_evaluation_at = None
-        sensor.save()
+        reconcile(sensor, now=now, evidence_id=f"action-{action.pk}")
         return sensor
 
 

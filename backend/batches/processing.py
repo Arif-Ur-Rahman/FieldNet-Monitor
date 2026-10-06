@@ -22,6 +22,7 @@ from core.tick import Due
 from core.timeutil import is_too_far_ahead, parse_iso
 from gateways import commands, state
 from gateways.models import Gateway
+from sensors.engine.reconcile import reconcile_sensors
 from sensors.models import Sensor
 from testing import faults
 
@@ -99,6 +100,8 @@ def attempt(batch_id: str, effective_at: datetime) -> None:
         evidence_id = f"batch-{batch.batch_id}"
         state.on_qualifying(gateway, batch.latest_accepted_taken_at, now=effective_at, evidence_id=evidence_id)
         commands.check_readings(gateway, batch.accepted.order_by("taken_at", "reading_id"))
+    if batch.resolved:
+        reconcile_sensors([batch.sensor_id], now=effective_at, evidence_id=f"batch-{batch.batch_id}")
 
 
 def record(batch: Batch, before: str, at: datetime) -> None:
