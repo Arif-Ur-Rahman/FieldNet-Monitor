@@ -249,3 +249,12 @@ class TestCoverage:
         set_coverage(api, "S", ["G"])
         s = ex.sensor()
         assert (state(s), s["quiet_checked_days"], s["sampling_cycles_done"]) == (("pending", None, iso(6)), 0, 0)
+
+
+def test_collection_does_not_flap_when_s_is_reported_exactly_every_24_hours(ex):
+    ex.start()
+    ex.play(6)
+    collection = [(e.from_value, e.to_value) for e in timeline.entries("sensor", "S") if e.axis == "collection"]
+    # Each 12:00 outcome is still fresh at the next day's 12:00, when the new one arrives.
+    assert collection == [("not_checked", "readings"), ("readings", "no_readings")]
+    assert ex.sensor()["collection"] == "no_readings"

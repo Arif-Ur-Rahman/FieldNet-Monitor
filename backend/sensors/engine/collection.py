@@ -17,6 +17,9 @@ from sensors.engine.days import BatchInfo, Outcome, resolution
 
 PRECEDENCE = ["readings", "no_readings", "could_not_read", "timed_out"]
 WINDOW = timedelta(hours=24)
+# An outcome is fresh up to and including exactly 24h; it ages out one microsecond later (the
+# database's resolution). A gateway reporting exactly every 24h then never flaps to not_checked.
+AGED_OUT = WINDOW + timedelta(microseconds=1)
 NOT_CHECKED = "not_checked"
 COLLECTION_STOPPED = "collection_stopped"
 
@@ -71,10 +74,9 @@ def latest_collection(
         if o.gateway_id not in latest or key[:2] > latest[o.gateway_id][:2]:
             latest[o.gateway_id] = key
 
-    # Strictly within the last 24h, so at changes_at (exactly 24h later) the outcome has aged out.
-    fresh = [entry for entry in latest.values() if entry[0] > now - WINDOW]
+    fresh = [entry for entry in latest.values() if entry[0] >= now - WINDOW]
     if not fresh:
         return Collection(NOT_CHECKED, None)
     value = min((shown for _, _, shown, _ in fresh), key=PRECEDENCE.index)
-    changes = [when + WINDOW for when, *_ in fresh] + [flips for *_, flips in fresh if flips is not None]
+    changes = [when + AGED_OUT for when, *_ in fresh] + [flips for *_, flips in fresh if flips is not None]
     return Collection(value, min(changes))

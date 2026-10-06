@@ -118,6 +118,43 @@ class TestConfig:
         assert config.config_at(at(10)).quiet_days_before_dormant == 7
         assert config.config_at(at(20)).stale_after == timedelta(hours=6)
 
+    def test_fields_round_trip_the_defaults(self):
+        assert config.DEFAULT.fields() == {
+            "quiet_days_before_dormant": 14,
+            "dormant_wait_hours": 336,
+            "sampling_window_hours": 72,
+            "sampling_cycles_before_retired": 2,
+            "stale_after_hours": 12,
+            "command_timeout_minutes": 10,
+            "batch_deadline_hours": 24,
+        }
+
+
+def stale_version(effective_from, hours):
+    fields = config.DEFAULT.fields() | {"stale_after_hours": hours}
+    ConfigVersion.objects.create(effective_from=effective_from, recorded_at=effective_from, **fields)
+
+
+class TestDeadline:
+    """deadline(start, threshold): when the time since `start` reaches the threshold in force then."""
+
+    def test_defaults(self):
+        assert config.deadline(at(1, 8), "stale_after") == at(1, 20)
+
+    def test_shortened_after_start_applies_from_the_change(self):
+        stale_version(at(1, 10), 1)
+        # 2 hours have passed at 10:00, already more than the new 1 hour: due at the change.
+        assert config.deadline(at(1, 8), "stale_after") == at(1, 10)
+        assert config.deadline(at(1, 9, 30), "stale_after") == at(1, 10, 30)
+
+    def test_lengthened_after_start(self):
+        stale_version(at(1, 10), 24)
+        assert config.deadline(at(1, 8), "stale_after") == at(2, 8)
+
+    def test_change_after_the_old_deadline_does_not_reach_back(self):
+        stale_version(at(2), 24)
+        assert config.deadline(at(1, 8), "stale_after") == at(1, 20)
+
 
 class TestTimeutil:
     def test_iso_uses_z(self):

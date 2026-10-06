@@ -53,8 +53,9 @@ class TestLatestPerGateway:
         assert run([o("readings", 8), o("timed_out", 10)], batches=ARRIVED).value == "timed_out"
 
     def test_older_than_24_hours_does_not_count(self):
-        assert run([o("no_readings", 12, day=9)]).value == "not_checked"
-        assert run([o("no_readings", 13, day=9)]).value == "no_readings"
+        assert run([o("no_readings", 11, day=9)]).value == "not_checked"
+        # Exactly 24h old is still within the last 24 hours.
+        assert run([o("no_readings", 12, day=9)]).value == "no_readings"
 
     def test_only_available_gateways_count(self):
         classes = {"g1": "recoverable", "g2": "available"}
@@ -117,7 +118,7 @@ class TestUnmentionedReadings:
 class TestChangesAt:
     def test_when_the_freshest_outcome_ages_out(self):
         c = run([o("no_readings", 9, gw="g1"), o("timed_out", 11, gw="g2")])
-        assert c == Collection("no_readings", at(11, 9))
+        assert c == Collection("no_readings", at(11, 9) + timedelta(microseconds=1))
 
     def test_nothing_changes_without_fresh_outcomes(self):
         assert run([]).changes_at is None
