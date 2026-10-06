@@ -1,7 +1,9 @@
 """Recording gateway evidence: heartbeats and cycles.
 
 Each function runs inside the caller's transaction with the gateway row locked.
-Gateway status transitions driven by this evidence arrive in #6.
+New evidence first updates the gateway (gateways.state), which recomputes
+coverage; applying the evidence to sensors comes after, in the sensor engine.
+A repeated request changes nothing.
 """
 
 import hashlib
@@ -12,6 +14,7 @@ from django.db.models import Q
 
 from core.errors import Conflict, Unprocessable
 from core.timeutil import is_too_far_ahead
+from gateways import state
 from gateways.models import Cycle, CycleResult, Gateway, Heartbeat, Session
 from sensors.models import Sensor
 
@@ -22,6 +25,10 @@ REPORTED_TO_RECORDED = {
     "could_not_read": Outcome.COULD_NOT_READ,
     "timeout": Outcome.TIMED_OUT,
 }
+
+
+# An ok cycle qualifies with at least one of these among its recorded (covered) results.
+QUALIFYING_OUTCOMES = {"readings", "no_readings"}
 
 
 def body_hash(data) -> str:
@@ -36,13 +43,16 @@ def reject_future(received_at: datetime, **event_times: datetime) -> None:
 
 def record_heartbeat(gateway: Gateway, *, sent_at: datetime, session: str, received_at: datetime) -> Heartbeat:
     reject_future(received_at, sent_at=sent_at)
-    heartbeat, _ = Heartbeat.objects.get_or_create(
+    heartbeat, created = Heartbeat.objects.get_or_create(
         gateway=gateway, sent_at=sent_at, session=session, defaults={"received_at": received_at}
     )
     # last_heartbeat_at is the received time of the latest heartbeat, whatever the session.
     if gateway.last_heartbeat_at is None or received_at > gateway.last_heartbeat_at:
         gateway.last_heartbeat_at = received_at
         gateway.save(update_fields=["last_heartbeat_at"])
+    # A heartbeat never qualifies; with auth_failed it disconnects.
+    if created and session == Session.AUTH_FAILED:
+        state.on_auth_failure(gateway, sent_at, now=received_at, evidence_id=f"heartbeat-{heartbeat.pk}")
     return heartbeat
 
 
@@ -93,4 +103,9 @@ def record_cycle(gateway: Gateway, data: dict, raw: dict, *, received_at: dateti
         for r in results
         if r["sensor_id"] in covered
     )
+    evidence_id = f"cycle-{cycle.pk}"
+    if auth_failed:
+        state.on_auth_failure(gateway, cycle.finished_at, now=received_at, evidence_id=evidence_id)
+    elif any(r["outcome"] in QUALIFYING_OUTCOMES for r in results if r["sensor_id"] in covered):
+        state.on_qualifying(gateway, cycle.finished_at, now=received_at, evidence_id=evidence_id)
     return cycle, True
