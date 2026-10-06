@@ -41,3 +41,13 @@ def test_cli_reports_a_server_without_test_mode(live_server, settings, monkeypat
 def test_cli_rejects_an_unknown_story():
     with redirect_stdout(io.StringIO()):
         assert sim.main(["no-such-story"]) == 2
+
+
+def test_the_script_itself_finds_the_stories():
+    """Run as a script, sim.py is __main__; the stories must still register with it."""
+    import subprocess
+
+    out = subprocess.run(
+        [sys.executable, str(SIMULATOR / "sim.py"), "--list"], capture_output=True, text=True, check=True
+    ).stdout
+    assert all(name in out for name in sim.STORIES), out

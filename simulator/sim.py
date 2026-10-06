@@ -186,6 +186,9 @@ def main(argv=None) -> int:
         for name, (_, description) in STORIES.items():
             say(f"{name:28} {description}")
         return 0
+    if not STORIES:
+        say("No stories registered.")
+        return 2
     names = list(STORIES) if args.story == "all" else [args.story]
     unknown = [n for n in names if n not in STORIES]
     if unknown:
@@ -205,4 +208,7 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    # Run as a script, this module is __main__; let `import sim` in stories.py find this
+    # same module, or the stories would register into a second copy the CLI never sees.
+    sys.modules.setdefault("sim", sys.modules[__name__])
     sys.exit(main())
