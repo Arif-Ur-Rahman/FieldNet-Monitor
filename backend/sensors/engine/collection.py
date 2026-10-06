@@ -71,7 +71,8 @@ def latest_collection(
         if o.gateway_id not in latest or key[:2] > latest[o.gateway_id][:2]:
             latest[o.gateway_id] = key
 
-    fresh = [entry for entry in latest.values() if entry[0] >= now - WINDOW]
+    # Strictly within the last 24h, so at changes_at (exactly 24h later) the outcome has aged out.
+    fresh = [entry for entry in latest.values() if entry[0] > now - WINDOW]
     if not fresh:
         return Collection(NOT_CHECKED, None)
     value = min((shown for _, _, shown, _ in fresh), key=PRECEDENCE.index)
