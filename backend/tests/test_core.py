@@ -159,3 +159,12 @@ class TestErrors:
         resp = client.get("/no/such/route")
         assert resp.status_code == 404
         assert resp.json()["error"] == "not_found"
+
+
+def test_every_api_response_carries_the_server_clock(api, clock_at):
+    clock_at(3, 12)
+    assert api.get("/api/v1/gateways")["X-Server-Now"] == "2026-01-04T12:00:00Z"
+    assert api.get("/api/v1/sensors/nope")["X-Server-Now"] == "2026-01-04T12:00:00Z"
+    assert api.post("/test/clock", {"now": "2026-01-05T00:00:00Z"}, format="json")["X-Server-Now"] == (
+        "2026-01-05T00:00:00Z"
+    )

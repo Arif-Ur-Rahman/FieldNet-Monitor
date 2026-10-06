@@ -15,10 +15,11 @@ async function proxy(request: Request, ctx: RouteContext<"/api/[...path]">) {
     init.body = await request.text();
   }
   const upstream = await fetch(target, init);
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: { "content-type": upstream.headers.get("content-type") ?? "application/json" },
-  });
+  const headers = new Headers({ "content-type": upstream.headers.get("content-type") ?? "application/json" });
+  // The server clock: the console measures durations against it, not the browser's clock.
+  const serverNow = upstream.headers.get("x-server-now");
+  if (serverNow) headers.set("x-server-now", serverNow);
+  return new Response(upstream.body, { status: upstream.status, headers });
 }
 
 export { proxy as GET, proxy as POST, proxy as PUT, proxy as DELETE };
