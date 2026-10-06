@@ -8,6 +8,7 @@ row locked (gateways before sensors).
 from datetime import datetime
 from functools import partial
 
+from batches.models import Reading
 from core import config, timeline
 from core.errors import Conflict, NotFound, Unprocessable
 from core.models import TimelineEntry
@@ -141,7 +142,13 @@ def open_stop_period(gateway: Gateway, stop: Command) -> StopPeriod:
     ended_at = None
     if resume is not None and resume.acked_at is not None:
         ended_at = max(resume.acked_at, stop.acked_at)
-    return StopPeriod.objects.create(gateway=gateway, stop=stop, started_at=stop.acked_at, ended_at=ended_at)
+    period = StopPeriod.objects.create(gateway=gateway, stop=stop, started_at=stop.acked_at, ended_at=ended_at)
+    # A late ack: readings already accepted inside the period count too.
+    taken = Reading.objects.filter(gateway=gateway, taken_at__gte=period.started_at)
+    if ended_at is not None:
+        taken = taken.filter(taken_at__lte=ended_at)
+    check_readings(gateway, taken.order_by("taken_at", "reading_id"), periods=[period])
+    return period
 
 
 def close_stop_periods(gateway: Gateway, resume: Command) -> None:
@@ -149,6 +156,7 @@ def close_stop_periods(gateway: Gateway, resume: Command) -> None:
     for period in gateway.stop_periods.filter(ended_at__isnull=True, stop__seq__lt=resume.seq):
         period.ended_at = max(resume.acked_at, period.started_at)
         period.save(update_fields=["ended_at"])
+    clear_flag(gateway, resume)
 
 
 FAILED = {Command.Type.STOP: CommandState.STOP_FAILED, Command.Type.RESUME: CommandState.RESUME_FAILED}
@@ -182,3 +190,64 @@ def run_timeout(command_id: str, effective_at: datetime) -> None:
             rule="command_timeout",
             evidence_ids=[f"command-{command_id}"],
         )
+
+
+FLAG = "collecting_after_stop"
+
+
+def check_readings(gateway: Gateway, readings, *, periods=None) -> None:
+    """Flag accepted readings from this gateway taken inside one of its stop periods.
+
+    Each such reading is kept and counted, and writes a `flag` entry. The
+    gateway's flag is raised only by a reading in the current (open) period.
+    A period includes its stop's acked_at and its resume's acked_at.
+    """
+    periods = list(gateway.stop_periods.all()) if periods is None else periods
+    for reading in readings:
+        period = next((p for p in periods if inside(p, reading.taken_at)), None)
+        if period is None:
+            continue
+        before = gateway.flags
+        if not period.has_readings:
+            period.has_readings = True
+            period.save(update_fields=["has_readings"])
+        if period.ended_at is None and not gateway.collecting_after_stop:
+            gateway.collecting_after_stop = True
+            gateway.save(update_fields=["collecting_after_stop"])
+        timeline.append(
+            "gateway",
+            gateway.gateway_id,
+            kind=Kind.FLAG,
+            axis="flags",
+            from_value=",".join(before) or None,
+            to_value=",".join(gateway.flags) or None,
+            rule=FLAG,
+            effective_at=reading.taken_at,
+            evidence_ids=[f"reading-{reading.reading_id}"],
+            detail={"stop_command_id": period.stop_id, "period_open": period.ended_at is None},
+        )
+
+
+def inside(period: StopPeriod, taken_at: datetime) -> bool:
+    return period.started_at <= taken_at and (period.ended_at is None or taken_at <= period.ended_at)
+
+
+def clear_flag(gateway: Gateway, resume: Command) -> None:
+    """The flag clears when a resume is acknowledged and no open stop period remains with readings."""
+    if not gateway.collecting_after_stop:
+        return
+    if gateway.stop_periods.filter(ended_at__isnull=True, has_readings=True).exists():
+        return
+    gateway.collecting_after_stop = False
+    gateway.save(update_fields=["collecting_after_stop"])
+    timeline.append(
+        "gateway",
+        gateway.gateway_id,
+        kind=Kind.FLAG,
+        axis="flags",
+        from_value=FLAG,
+        to_value=None,
+        rule="resume_acked",
+        effective_at=resume.acked_at,
+        evidence_ids=[f"command-{resume.command_id}"],
+    )

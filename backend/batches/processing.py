@@ -20,7 +20,7 @@ from batches.models import Batch, QuarantinedReading, Reading
 from core import timeline
 from core.tick import Due
 from core.timeutil import is_too_far_ahead, parse_iso
-from gateways import state
+from gateways import commands, state
 from gateways.models import Gateway
 from sensors.models import Sensor
 from testing import faults
@@ -98,6 +98,7 @@ def attempt(batch_id: str, effective_at: datetime) -> None:
         # A processed batch with an accepted reading qualifies, at its latest accepted taken_at.
         evidence_id = f"batch-{batch.batch_id}"
         state.on_qualifying(gateway, batch.latest_accepted_taken_at, now=effective_at, evidence_id=evidence_id)
+        commands.check_readings(gateway, batch.accepted.order_by("taken_at", "reading_id"))
 
 
 def record(batch: Batch, before: str, at: datetime) -> None:
