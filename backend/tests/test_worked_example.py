@@ -151,3 +151,32 @@ class TestWorkedExample:
             ("transition", "sampling", None, at(46)),
             ("transition", "retired", "no_readings", at(49)),
         ]
+
+
+class TestDisconnectionMidWindow:
+    """G reports auth_failed on day 30 at 12:00 and sends a good cycle on day 37 at 12:00."""
+
+    def test_window_pauses_with_36_hours_left_and_ends_on_day_39(self, ex):
+        ex.start()
+        ex.play(30, 12)
+        ex.cycle(30, 12, {"sensor_id": "S", "outcome": "no_readings"}, session="auth_failed")
+        ex.position = (30, 13)
+        assert ex.api.get("/api/v1/gateways/G").json()["status"] == "disconnected"
+
+        ex.play(33, silent=range(30, 37))
+        s = ex.sensor()
+        # Paused: still sampling, no next evaluation, and collection shows not_checked.
+        assert (s["lifecycle"], s["lifecycle_since"], s["next_evaluation_at"]) == ("sampling", iso(29), None)
+        assert (s["coverage"], s["collection"]) == ("recoverable", "not_checked")
+
+        ex.play(37, 12, silent=range(30, 38))  # nothing at all until the good cycle
+        ex.cycle(37, 12, {"sensor_id": "S", "outcome": "no_readings"})
+        ex.position = (37, 13)
+        s = ex.sensor()
+        assert (s["lifecycle"], s["next_evaluation_at"], s["coverage"]) == ("sampling", iso(39), "available")
+
+        ex.play(38, 23)
+        assert ex.sensor()["lifecycle"] == "sampling"
+        ex.play(39)
+        s = ex.sensor()
+        assert (state(s), s["sampling_cycles_done"]) == (("dormant", None, iso(39)), 1)
