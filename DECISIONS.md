@@ -49,6 +49,7 @@ _Every ambiguity in the brief gets one line here: what the brief says, what we c
 - **`collecting_after_stop`.** Each accepted reading inside any stop period writes a `flag` entry, effective at its `taken_at`. Only a reading in the current, open period raises the flag; one in a past period is recorded only. A stop acked late also checks readings already accepted. The flag clears when a resume ack closes the open period.
 - **Stale threshold.** The stale timer uses the threshold in force at `last_qualifying_at` (thresholds can't change yet; #23).
 - **Duplicate readings.** A repeat of an accepted reading with the same content (sensor, `taken_at`, value, unit) is ignored: not counted, not quarantined. Batches are processed in received order, so "the first processed version" is the first received. A batch whose readings are all ignored repeats ends `processed` with `accepted_count` 0.
+- **Coverage history for the engine.** The sensor's coverage history is read from its recorded coverage transitions, timed by the server clock as the brief requires for coverage changes, rather than rebuilt from gateway transitions (which use event times). A gateway's class history, used for quiet days, comes from its status and command state transitions.
 
 ## Trade-offs and compromises
 _TBD_
