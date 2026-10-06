@@ -21,6 +21,11 @@ _Every ambiguity in the brief gets one line here: what the brief says, what we c
 - **`spare` coverage class.** Not in the brief's table. A spare gateway covers no sensors (that is `mark_spare`'s precondition), so its class never affects a sensor; we report `recoverable`.
 - **Coverage on a decommissioned sensor.** "Any later action returns 409" is read as the sensor actions endpoint. Coverage can still be edited; it never changes a decommissioned lifecycle.
 - **Gateway tokens.** Only a SHA-256 hash is stored; the token is shown once, at registration.
+- **`cycle_id` scope.** Unique per gateway (the brief calls only `batch_id` globally unique). "Identical body" means the same canonical JSON (sorted keys).
+- **Future device timestamps on heartbeats and cycles.** A `sent_at`, `started_at` or `finished_at` more than 5 minutes after the received time makes the whole request 422 `timestamp_in_future` (readings, by contrast, are quarantined one by one).
+- **Cycle body checks.** `finished_at` before `started_at`, or the same sensor twice in `results`, is 422. `"batch_id": null` counts as absent.
+- **Ignored results.** A result is ignored when the gateway has no current assignment for that sensor at the received time, including unknown sensor ids. Ignored results are not stored.
+- **Heartbeat retries.** The same `(sent_at, session)` from the same gateway is one heartbeat; `last_heartbeat_at` only moves forward.
 
 ## Trade-offs and compromises
 _TBD_
