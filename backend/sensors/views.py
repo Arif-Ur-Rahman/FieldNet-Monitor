@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core import timeline
+from core.params import choices_filter
 from sensors import services
 from sensors.models import Sensor
 
@@ -22,6 +23,14 @@ class SensorActionIn(serializers.Serializer):
 
 
 class SensorListView(APIView):
+    def get(self, request):
+        """Every sensor's state, ordered by id. ?lifecycle=a,b filters by lifecycle."""
+        sensors = Sensor.objects.order_by("sensor_id")
+        lifecycles = choices_filter(request, "lifecycle", Sensor.Lifecycle.values)
+        if lifecycles is not None:
+            sensors = sensors.filter(lifecycle__in=lifecycles)
+        return Response([services.serialize(s) for s in sensors])
+
     def post(self, request):
         body = RegisterSensorIn(data=request.data)
         body.is_valid(raise_exception=True)
