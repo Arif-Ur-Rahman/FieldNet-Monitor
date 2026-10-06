@@ -73,7 +73,7 @@ def stale_due(gateway: Gateway) -> datetime | None:
     """When a connected gateway goes stale if no newer qualifying evidence arrives."""
     if gateway.last_qualifying_at is None:
         return None
-    return gateway.last_qualifying_at + config.config_at(gateway.last_qualifying_at).stale_after
+    return config.deadline(gateway.last_qualifying_at, "stale_after")
 
 
 def apply_stale(gateway: Gateway, now: datetime) -> None:
