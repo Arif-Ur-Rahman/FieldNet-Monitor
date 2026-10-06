@@ -26,6 +26,9 @@ _Every ambiguity in the brief gets one line here: what the brief says, what we c
 - **Cycle body checks.** `finished_at` before `started_at`, or the same sensor twice in `results`, is 422. `"batch_id": null` counts as absent.
 - **Ignored results.** A result is ignored when the gateway has no current assignment for that sensor at the received time, including unknown sensor ids. Ignored results are not stored.
 - **Heartbeat retries.** The same `(sent_at, session)` from the same gateway is one heartbeat; `last_heartbeat_at` only moves forward.
+- **Work due at the same instant.** `tick()` runs the earliest due item first; ties run in source order: batches and retries, then gateway timers, then sensor timers. Each item runs in its own transaction with its due time as `effective_at`; `recorded_at` is the server clock.
+- **Test endpoint responses.** `/test/clock` and `/test/drain` return 200 `{"now"}`; `/test/reset` and `/test/faults` return 204. `/test/reset` empties every project table, the clock included, so the next `/test/clock` accepts any time.
+- **`/test/faults`.** `processing_failures` replaces any count left over; each failure is one processing attempt, consumed in order whatever the batch.
 
 ## Trade-offs and compromises
 _TBD_
