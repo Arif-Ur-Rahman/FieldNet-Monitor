@@ -217,3 +217,34 @@ def test_loss_of_coverage_comes_before_a_reading_at_the_same_instant():
     )
     # The coverage loss applies first; the reading at the same instant then finds coverage none.
     assert (r.lifecycle, r.reason, r.since) == ("retired", "no_live_coverage", at(1))
+
+
+def cited_tests(text: str) -> list[str]:
+    """Test ids cited in docs/conformance.md. `::test_x` reuses the previous id's file and class."""
+    ids, last = [], None
+    for ref in re.findall(r"`((?:test_\w+\.py)?::[\w:]+)`", text):
+        if ref.startswith("::") and last:
+            ref = last.rsplit("::", 1)[0] + ref
+        ids.append(ref)
+        last = ref
+    return ids
+
+
+def test_cited_tests_exist():
+    """docs/conformance.md maps every brief rule to tests; each one it names must exist."""
+    import importlib
+
+    doc = Path(__file__).resolve().parents[2] / "docs" / "conformance.md"
+    if not doc.is_file():
+        pytest.skip("docs/ is not mounted here")
+    ids = cited_tests(doc.read_text())
+    assert len(ids) > 100
+    missing = []
+    for test_id in ids:
+        file, *path = test_id.split("::")
+        obj = importlib.import_module(f"tests.{file.removesuffix('.py')}")
+        for name in path:
+            obj = getattr(obj, name, None)
+        if obj is None:
+            missing.append(test_id)
+    assert missing == []
