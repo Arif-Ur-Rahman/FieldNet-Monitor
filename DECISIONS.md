@@ -52,6 +52,7 @@ _Every ambiguity in the brief gets one line here: what the brief says, what we c
 - **Stale threshold.** The stale timer uses the threshold in force at `last_qualifying_at` (thresholds can't change yet; #23).
 - **Duplicate readings.** A repeat of an accepted reading with the same content (sensor, `taken_at`, value, unit) is ignored: not counted, not quarantined. Batches are processed in received order, so "the first processed version" is the first received. A batch whose readings are all ignored repeats ends `processed` with `accepted_count` 0.
 - **Coverage history for the engine.** The sensor's coverage history is read from its recorded coverage transitions, timed by the server clock as the brief requires for coverage changes, rather than rebuilt from gateway transitions (which use event times). A gateway's class history, used for quiet days, comes from its status and command state transitions.
+- **Collection while a batch is pending.** A `readings` outcome whose batch hasn't resolved yet shows as `readings` (the gateway reported readings and the batch still has time); it turns `could_not_read` if the batch is missing at its deadline or ends quarantined. Two outcomes from one gateway at the same instant are decided by precedence. "Within the last 24 hours" includes exactly 24 hours ago.
 
 ## Trade-offs and compromises
 _TBD_
