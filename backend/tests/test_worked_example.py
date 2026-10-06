@@ -180,3 +180,34 @@ class TestDisconnectionMidWindow:
         ex.play(39)
         s = ex.sensor()
         assert (state(s), s["sampling_cycles_done"]) == (("dormant", None, iso(39)), 1)
+
+
+class TestLateReading:
+    """On day 20, G uploads a batch holding a reading taken on day 9."""
+
+    def test_correction_from_dormant_to_active_and_the_day_15_entry_stays(self, ex):
+        ex.start()
+        ex.play(20, 9)
+        assert state(ex.sensor()) == ("dormant", None, iso(15))
+
+        ex.batch("late", (9, 8))
+        assert ex.api.post("/test/drain").status_code == 200
+        s = ex.sensor()
+        # Days 10-19 are 10 quiet days: active, with every later timer moved.
+        assert (state(s), s["quiet_checked_days"], s["next_evaluation_at"]) == (("active", None, iso(0, 12)), 10, None)
+        assert ex.lifecycle() == [
+            ("transition", "active", None, at(0, 12)),
+            ("transition", "dormant", None, at(15)),
+            ("correction", "active", None, at(15)),
+        ]
+        [correction] = [e for e in timeline.entries("sensor", "S") if e.kind == "correction"]
+        assert (correction.from_value, correction.to_value, correction.evidence_ids) == (
+            "dormant",
+            "active",
+            ["batch-late"],
+        )
+
+        # It goes dormant again when day 23 completes: the 14th quiet day since day 9.
+        ex.play(24)
+        assert state(ex.sensor()) == ("dormant", None, iso(24))
+        assert ex.lifecycle()[-1] == ("transition", "dormant", None, at(24))
