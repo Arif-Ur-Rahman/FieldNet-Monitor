@@ -59,6 +59,15 @@ def get(batch_id: str) -> Batch:
     return batch
 
 
+def find(batch_ids) -> dict[str, Batch]:
+    """Batches by id, for matching cycle results. Ids not received yet are absent.
+
+    A cycle result and its batch arrive in either order; they are only ever
+    matched by batch_id when read, so neither side waits for the other.
+    """
+    return Batch.objects.in_bulk(list(batch_ids))
+
+
 def serialize(batch: Batch) -> dict:
     return {
         "processing": batch.processing,
