@@ -61,3 +61,61 @@ class Gateway(models.Model):
 
     def __str__(self):
         return self.gateway_id
+
+
+class Session(models.TextChoices):
+    OK = "ok"
+    AUTH_FAILED = "auth_failed"
+
+
+class Heartbeat(models.Model):
+    """Evidence that the gateway is running (never that it is collecting)."""
+
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="heartbeats")
+    sent_at = models.DateTimeField()  # event time
+    session = models.CharField(max_length=16, choices=Session.choices)
+    received_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            # A retried heartbeat is the same heartbeat.
+            models.UniqueConstraint(fields=["gateway", "sent_at", "session"], name="heartbeat_unique"),
+        ]
+
+
+class Cycle(models.Model):
+    """One check of a gateway's sensors. Idempotent on (gateway, cycle_id)."""
+
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="cycles")
+    cycle_id = models.CharField(max_length=128)
+    started_at = models.DateTimeField()
+    finished_at = models.DateTimeField()  # event time
+    session = models.CharField(max_length=16, choices=Session.choices)
+    received_at = models.DateTimeField()
+    body_hash = models.CharField(max_length=64)  # canonical JSON hash, to tell a repeat from a conflict
+    ignored = models.JSONField(default=list)  # sensor ids in the body this gateway did not cover
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["gateway", "cycle_id"], name="cycle_unique_per_gateway")]
+
+
+class CycleResult(models.Model):
+    """One sensor's outcome in a cycle, as recorded (auth_failed -> could_not_read, timeout -> timed_out)."""
+
+    class Outcome(models.TextChoices):
+        READINGS = "readings"
+        NO_READINGS = "no_readings"
+        COULD_NOT_READ = "could_not_read"
+        TIMED_OUT = "timed_out"
+
+    cycle = models.ForeignKey(Cycle, on_delete=models.CASCADE, related_name="results")
+    sensor = models.ForeignKey("sensors.Sensor", on_delete=models.CASCADE, related_name="cycle_results")
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="cycle_results")
+    finished_at = models.DateTimeField()  # copied from the cycle for per-sensor queries
+    outcome = models.CharField(max_length=16, choices=Outcome.choices)
+    reported_outcome = models.CharField(max_length=16)  # what the device sent
+    batch_id = models.CharField(max_length=128, null=True)  # set only when the recorded outcome is readings
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["cycle", "sensor"], name="one_result_per_sensor_per_cycle")]
+        indexes = [models.Index(fields=["sensor", "finished_at"]), models.Index(fields=["batch_id"])]
