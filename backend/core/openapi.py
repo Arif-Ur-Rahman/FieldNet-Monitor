@@ -157,6 +157,19 @@ class BatchCountsOut(serializers.Serializer):
     processing = counts(Batch.Processing.values)
 
 
+class ConfigOut(serializers.Serializer):
+    effective_from = serializers.DateTimeField(
+        allow_null=True, help_text="When this version took effect; null for the defaults."
+    )
+    quiet_days_before_dormant = serializers.IntegerField()
+    dormant_wait_hours = serializers.IntegerField(help_text="Of available time.")
+    sampling_window_hours = serializers.IntegerField(help_text="Of available time.")
+    sampling_cycles_before_retired = serializers.IntegerField()
+    stale_after_hours = serializers.IntegerField()
+    command_timeout_minutes = serializers.IntegerField()
+    batch_deadline_hours = serializers.IntegerField()
+
+
 class DashboardOut(serializers.Serializer):
     gateways = GatewayCountsOut()
     sensors = SensorCountsOut()
