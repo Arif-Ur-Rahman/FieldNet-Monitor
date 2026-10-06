@@ -6,10 +6,12 @@ row locked (gateways before sensors).
 """
 
 from datetime import datetime
+from functools import partial
 
 from core import config, timeline
 from core.errors import Conflict, NotFound, Unprocessable
 from core.models import TimelineEntry
+from core.tick import Due
 from core.timeutil import is_too_far_ahead
 from gateways import state
 from gateways.models import Command, Gateway, StopPeriod
@@ -147,3 +149,36 @@ def close_stop_periods(gateway: Gateway, resume: Command) -> None:
     for period in gateway.stop_periods.filter(ended_at__isnull=True, stop__seq__lt=resume.seq):
         period.ended_at = max(resume.acked_at, period.started_at)
         period.save(update_fields=["ended_at"])
+
+
+FAILED = {Command.Type.STOP: CommandState.STOP_FAILED, Command.Type.RESUME: CommandState.RESUME_FAILED}
+
+
+def next_timeout_due(up_to: datetime) -> Due | None:
+    """The tick() source: the latest unacknowledged command whose timeout passes first, if by `up_to`."""
+    command = (
+        Command.objects.filter(acked_at__isnull=True, superseded=False, timed_out=False, timeout_at__lte=up_to)
+        .order_by("timeout_at", "command_id")
+        .first()
+    )
+    if command is None:
+        return None
+    return Due(due_at=command.timeout_at, run=partial(run_timeout, command.command_id), label=f"timeout {command.pk}")
+
+
+def run_timeout(command_id: str, effective_at: datetime) -> None:
+    """stop_pending → stop_failed, resume_pending → resume_failed, effective at the timeout."""
+    gateway_id = Command.objects.filter(pk=command_id).values_list("gateway_id", flat=True).get()
+    gateway = Gateway.objects.select_for_update().get(pk=gateway_id)
+    command = Command.objects.select_for_update().get(pk=command_id)
+    command.timed_out = True
+    command.save(update_fields=["timed_out"])
+    if gateway.command_state == PENDING[command.type]:
+        set_command_state(
+            gateway,
+            FAILED[command.type],
+            effective_at=command.timeout_at,
+            now=effective_at,
+            rule="command_timeout",
+            evidence_ids=[f"command-{command_id}"],
+        )
