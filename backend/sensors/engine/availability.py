@@ -63,7 +63,9 @@ def gateway_class_history(
 ) -> History:
     """A gateway's coverage class over time, from its status and command state changes."""
     initial = gateway_class(status, command_state)
-    events = sorted([(at, "status", v) for at, v in status_changes] + [(at, "command", v) for at, v in command_changes])
+    events = [(at, "status", v) for at, v in status_changes] + [(at, "command", v) for at, v in command_changes]
+    # By time only (a stable sort): changes at the same instant keep their recorded order.
+    events.sort(key=lambda e: e[0])
     classes = []
     for at, axis, value in events:
         if axis == "status":

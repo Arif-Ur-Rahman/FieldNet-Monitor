@@ -54,7 +54,9 @@ def load(sensor: Sensor) -> Evidence:
 
 def coverage_history(sensor: Sensor) -> History:
     """From the sensor's recorded coverage transitions (server clock)."""
-    changes = sorted((e.effective_at, e.to_value) for e in axis_entries("sensor", sensor.sensor_id, "coverage"))
+    changes = [(e.effective_at, e.to_value) for e in axis_entries("sensor", sensor.sensor_id, "coverage")]
+    # By time only: changes at the same instant keep their recorded order, so the last one wins.
+    changes.sort(key=lambda c: c[0])
     return history("none", sensor.created_at, changes)
 
 

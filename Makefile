@@ -16,7 +16,7 @@ logs:
 	$(COMPOSE) logs -f api worker
 
 test:          ## Run the backend test suite in Docker
-	$(COMPOSE) run --rm --build -e TEST_MODE=1 api pytest
+	$(COMPOSE) run --rm --build -v $(PWD)/simulator:/simulator -e TEST_MODE=1 api pytest
 
 sim:           ## Play simulator stories against the running stack (STORY=name|all)
 	$(COMPOSE) run --rm --no-deps -v $(PWD)/simulator:/simulator -e API_URL=http://api:8000 api python /simulator/sim.py $(STORY)
@@ -30,8 +30,8 @@ test-local:
 sim-local:
 	API_URL=http://localhost:8000 $(VENV)/python simulator/sim.py $(STORY)
 
-lint:
-	cd backend && .venv/bin/ruff check . && .venv/bin/ruff format --check .
+lint:          ## Lint backend and simulator with the backend's ruff settings
+	cd backend && .venv/bin/ruff check --config ruff.toml . ../simulator && .venv/bin/ruff format --config ruff.toml --check . ../simulator
 
 fmt:
-	cd backend && .venv/bin/ruff check --fix . && .venv/bin/ruff format .
+	cd backend && .venv/bin/ruff check --config ruff.toml --fix . ../simulator && .venv/bin/ruff format --config ruff.toml . ../simulator
