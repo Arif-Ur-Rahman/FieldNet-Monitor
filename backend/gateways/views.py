@@ -3,7 +3,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core import timeline
+from core.params import choices_filter
 from gateways import actions, services
+from gateways.models import Gateway
 
 
 class RegisterGatewayIn(serializers.Serializer):
@@ -24,6 +26,14 @@ class GatewayActionIn(serializers.Serializer):
 
 
 class GatewayListView(APIView):
+    def get(self, request):
+        """Every gateway's state, ordered by id. ?status=a,b filters by status."""
+        gateways = Gateway.objects.order_by("gateway_id")
+        statuses = choices_filter(request, "status", Gateway.Status.values)
+        if statuses is not None:
+            gateways = gateways.filter(status__in=statuses)
+        return Response([services.serialize(g) for g in gateways])
+
     def post(self, request):
         body = RegisterGatewayIn(data=request.data)
         body.is_valid(raise_exception=True)
