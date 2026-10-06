@@ -20,6 +20,8 @@ from batches.models import Batch, QuarantinedReading, Reading
 from core import timeline
 from core.tick import Due
 from core.timeutil import is_too_far_ahead, parse_iso
+from gateways import state
+from gateways.models import Gateway
 from sensors.models import Sensor
 from testing import faults
 
@@ -58,6 +60,9 @@ def next_due(up_to: datetime) -> Due | None:
 
 def attempt(batch_id: str, effective_at: datetime) -> None:
     """One processing attempt, at its due time. The caller holds the transaction."""
+    # Lock the gateway before the batch, the same order as the PUT, so the two never deadlock.
+    gateway_id = Batch.objects.filter(pk=batch_id).values_list("gateway_id", flat=True).get()
+    gateway = Gateway.objects.select_for_update().get(pk=gateway_id)
     batch = Batch.objects.select_for_update().get(pk=batch_id)
     if batch.resolved:
         return
@@ -89,6 +94,10 @@ def attempt(batch_id: str, effective_at: datetime) -> None:
     batch.next_attempt_at = None
     batch.save()
     record(batch, before, effective_at)
+    if batch.accepted_count:
+        # A processed batch with an accepted reading qualifies, at its latest accepted taken_at.
+        evidence_id = f"batch-{batch.batch_id}"
+        state.on_qualifying(gateway, batch.latest_accepted_taken_at, now=effective_at, evidence_id=evidence_id)
 
 
 def record(batch: Batch, before: str, at: datetime) -> None:
