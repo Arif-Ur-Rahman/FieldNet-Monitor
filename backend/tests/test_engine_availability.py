@@ -58,6 +58,13 @@ class TestGatewayClassHistory:
             (at(5), "recoverable"),  # stale, whatever the command state
         ]
 
+    def test_changes_at_the_same_instant_keep_their_order(self):
+        # Recorded order new → connected → stale, all at one instant: stale wins, whatever the names sort to.
+        h = gateway_class_history(at(0), [(at(1), "connected"), (at(1), "stale")], [])
+        assert value_at(h, at(1)) == "recoverable"
+        h = gateway_class_history(at(0), [(at(1), "stale"), (at(1), "connected")], [])
+        assert value_at(h, at(1)) == "available"
+
     def test_availability_for_day_classification(self):
         histories = {"g1": gateway_class_history(at(0), [(at(1), "connected"), (at(2), "suspended")], [])}
         available = availability(histories)

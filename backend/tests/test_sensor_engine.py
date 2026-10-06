@@ -241,3 +241,21 @@ class TestDecommission:
 def test_reconcile_at_tracks_the_next_due_time(world):
     world.start()
     assert Sensor.objects.get().reconcile_at == at(1)  # the next midnight while active
+
+
+def test_coverage_changes_at_one_instant_end_on_the_last(api, test_mode):
+    """Sensor, assignment and the gateway's first good cycle all at once: coverage ends available."""
+    api.post("/test/clock", {"now": iso(0, 8)}, format="json")
+    g = device(register_gateway(api, "G1"))
+    register_sensor(api, "S1")
+    set_coverage(api, "S1", ["G1"])
+    body = {
+        "cycle_id": "c1",
+        "started_at": iso(0, 8),
+        "finished_at": iso(0, 8),
+        "session": "ok",
+        "results": [{"sensor_id": "S1", "outcome": "no_readings"}],
+    }
+    assert g.post("/gw/v1/cycles", body, format="json").status_code == 202
+    s = api.get("/api/v1/sensors/S1").json()
+    assert (s["coverage"], s["collection"]) == ("available", "no_readings")
