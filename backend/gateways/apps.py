@@ -7,6 +7,7 @@ class GatewaysConfig(AppConfig):
 
     def ready(self):
         from core import tick
-        from gateways import state
+        from gateways import commands, state
 
         tick.register("gateways", state.next_stale_due, order=tick.GATEWAYS)
+        tick.register("commands", commands.next_timeout_due, order=tick.GATEWAYS)

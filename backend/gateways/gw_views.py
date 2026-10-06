@@ -6,7 +6,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core import clock
-from gateways import ingest
+from core.timeutil import iso
+from gateways import commands, ingest
 from gateways.auth import gateway_from_request
 from gateways.models import Session
 
@@ -66,3 +67,33 @@ class CycleView(APIView):
             body.is_valid(raise_exception=True)
             cycle, created = ingest.record_cycle(gateway, body.validated_data, request.data, received_at=received_at)
         return Response({"ignored": cycle.ignored}, status=status.HTTP_202_ACCEPTED if created else status.HTTP_200_OK)
+
+
+class CommandsView(APIView):
+    """GET /gw/v1/commands: the latest command, only while it is unacknowledged."""
+
+    def get(self, request):
+        gateway = gateway_from_request(request, lock=False)
+        pending = commands.latest_unacknowledged(gateway)
+        return Response({"commands": [serialize_command(c) for c in pending]})
+
+
+def serialize_command(c) -> dict:
+    return {"command_id": c.command_id, "seq": c.seq, "type": c.type, "issued_at": iso(c.issued_at)}
+
+
+class AckIn(serializers.Serializer):
+    acked_at = serializers.DateTimeField()
+
+
+class CommandAckView(APIView):
+    """POST /gw/v1/commands/{command_id}/ack: idempotent 204."""
+
+    def post(self, request, command_id):
+        received_at = clock.now()
+        with transaction.atomic():
+            gateway = gateway_from_request(request)
+            body = AckIn(data=request.data)
+            body.is_valid(raise_exception=True)
+            commands.acknowledge(gateway, command_id, body.validated_data["acked_at"], received_at=received_at)
+        return Response(status=status.HTTP_204_NO_CONTENT)

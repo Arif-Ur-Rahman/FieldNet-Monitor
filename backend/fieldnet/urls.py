@@ -24,6 +24,8 @@ api_v1 = [
 gw_v1 = [
     path("heartbeat", gw_views.HeartbeatView.as_view()),
     path("cycles", gw_views.CycleView.as_view()),
+    path("commands", gw_views.CommandsView.as_view()),
+    path("commands/<str:command_id>/ack", gw_views.CommandAckView.as_view()),
     path("batches/<str:batch_id>", batch_views.GatewayBatchView.as_view()),
 ]
 
